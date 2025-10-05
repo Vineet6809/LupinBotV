@@ -89,8 +89,7 @@ class Streaks(commands.Cog):
                 
                 logger.info(f'User {message.author} continued streak: Day {day_number} (Streak: {current_streak})')
             else:
-                self.db.reset_streak(user_id, guild_id, day_number)
-                self.db.log_daily_entry(user_id, guild_id, day_number)
+                self.db.reset_streak(user_id, guild_id)
                 await message.add_reaction('🔄')
                 
                 embed = discord.Embed(

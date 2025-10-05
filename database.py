@@ -90,19 +90,19 @@ class Database:
         conn.commit()
         conn.close()
     
-    def reset_streak(self, user_id: int, guild_id: int, last_day_number: int = 0):
+    def reset_streak(self, user_id: int, guild_id: int):
         conn = self.get_connection()
         cursor = conn.cursor()
         today = datetime.utcnow().strftime("%Y-%m-%d")
         
         cursor.execute("""
             INSERT INTO streaks (user_id, guild_id, current_streak, longest_streak, last_log_date, last_day_number)
-            VALUES (?, ?, 0, 0, ?, ?)
+            VALUES (?, ?, 0, 0, ?, 0)
             ON CONFLICT(user_id, guild_id) DO UPDATE SET
                 current_streak = 0,
                 last_log_date = excluded.last_log_date,
-                last_day_number = excluded.last_day_number
-        """, (user_id, guild_id, today, last_day_number))
+                last_day_number = 0
+        """, (user_id, guild_id, today))
         
         conn.commit()
         conn.close()
