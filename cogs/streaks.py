@@ -5,6 +5,9 @@ import re
 from datetime import datetime
 from database import Database
 import logging
+import aiohttp
+import asyncio
+import gemini
 
 logger = logging.getLogger('LupinBot.streaks')
 
@@ -38,11 +41,34 @@ class Streaks(commands.Cog):
         
         return any(keyword in content.lower() for keyword in code_keywords)
     
-    def has_media_or_code(self, message) -> bool:
-        if message.attachments:
-            return True
+    async def has_media_or_code(self, message) -> bool:
         if self.code_pattern.search(message.content):
             return True
+        
+        if message.attachments:
+            for attachment in message.attachments:
+                if attachment.content_type and attachment.content_type.startswith('image/'):
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(attachment.url) as resp:
+                                if resp.status == 200:
+                                    image_bytes = await resp.read()
+                                    mime_type = attachment.content_type
+                                    has_code = await asyncio.to_thread(
+                                        gemini.detect_code_in_image, 
+                                        image_bytes, 
+                                        mime_type
+                                    )
+                                    if has_code:
+                                        logger.info(f'Image contains code (verified by Gemini): {attachment.filename}')
+                                        return True
+                                    else:
+                                        logger.info(f'Image does not contain code (verified by Gemini): {attachment.filename}')
+                    except Exception as e:
+                        logger.error(f'Error analyzing image with Gemini: {e}')
+                        return False
+            return False
+        
         return False
     
     def calculate_days_since_last_log(self, last_log_date: str) -> int:
@@ -71,7 +97,7 @@ class Streaks(commands.Cog):
         match = pattern.search(message.content)
         
         is_daily_code_channel = message.channel.name.lower() == "daily-code"
-        has_content = self.has_media_or_code(message)
+        has_content = await self.has_media_or_code(message)
         
         if self.db.has_logged_today(user_id, guild_id):
             if match or (is_daily_code_channel and has_content):
