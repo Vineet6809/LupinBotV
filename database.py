@@ -132,6 +132,18 @@ class Database:
         conn.close()
         return result is not None
     
+    def get_todays_day_number(self, user_id: int, guild_id: int) -> Optional[int]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        cursor.execute("""
+            SELECT day_number FROM daily_logs 
+            WHERE user_id = ? AND guild_id = ? AND log_date = ?
+        """, (user_id, guild_id, today))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+    
     def log_daily_entry(self, user_id: int, guild_id: int, day_number: int):
         conn = self.get_connection()
         cursor = conn.cursor()

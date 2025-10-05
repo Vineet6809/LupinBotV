@@ -67,14 +67,32 @@ class Streaks(commands.Cog):
         user_id = message.author.id
         guild_id = message.guild.id
         
-        if self.db.has_logged_today(user_id, guild_id):
-            return
-        
         pattern = re.compile(r'#\s*day[\s-]*(\d+)', re.IGNORECASE)
         match = pattern.search(message.content)
         
         is_daily_code_channel = message.channel.name.lower() == "daily-code"
         has_content = self.has_media_or_code(message)
+        
+        if self.db.has_logged_today(user_id, guild_id):
+            if match or (is_daily_code_channel and has_content):
+                today_day_number = self.db.get_todays_day_number(user_id, guild_id)
+                await message.add_reaction('✅')
+                if today_day_number:
+                    embed = discord.Embed(
+                        title="✅ Already Completed",
+                        description=f"{message.author.mention}, the streak is already for #DAY-{today_day_number} come back tomorrow",
+                        color=discord.Color.green()
+                    )
+                    logger.info(f'User {message.author} tried to log again for Day {today_day_number}')
+                else:
+                    embed = discord.Embed(
+                        title="✅ Already Completed",
+                        description=f"{message.author.mention}, your streak is already completed for today, come back tomorrow",
+                        color=discord.Color.green()
+                    )
+                    logger.warning(f'User {message.author} tried to log again but day number not found in database')
+                await message.channel.send(embed=embed)
+            return
         
         if not match and not (is_daily_code_channel and has_content):
             return
