@@ -41,6 +41,84 @@ class Utilities(commands.Cog):
         await interaction.response.send_message(embed=embed)
         logger.info(f'{interaction.user} requested server stats')
     
+    @app_commands.command(name="help", description="Show all available commands")
+    async def help(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="🤖 Lupin Bot - Command Help",
+            description="Here are all the commands you can use with Lupin!",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="🔥 Streak Tracking",
+            value=(
+                "**Post #DAY-n** - Track your daily coding streak (e.g., #DAY-1, #DAY-2)\n"
+                "`/leaderboard` - View top 10 coders in the server\n"
+                "`/mystats` - View your personal coding statistics\n"
+                "`/restore @user day` - Restore a user's streak (Admin only)"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🎮 Fun Commands",
+            value=(
+                "`/meme` - Get a random programming meme\n"
+                "`/quote` - Get an inspirational quote\n"
+                "`/joke` - Get a programming joke\n"
+                "`/challenge` - Get a random coding challenge"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🛠️ Utility Commands",
+            value=(
+                "`/stats` - Show server statistics\n"
+                "`/poll question, option1, option2...` - Create a poll\n"
+                "`/help` - Show this help message"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔨 Moderation (Admin Only)",
+            value=(
+                "`/kick @user reason` - Kick a member\n"
+                "`/ban @user reason` - Ban a member\n"
+                "`/mute @user duration reason` - Timeout a member\n"
+                "`/giverole @user role` - Assign a role to a member"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="⚙️ Server Settings (Admin Only)",
+            value=(
+                "`/setreminder HH:MM` - Set daily reminder time (UTC)\n"
+                "`/setreminderchannel #channel` - Set reminder channel\n"
+                "`/setchallengechannel #channel` - Set challenge channel"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🏆 Achievement Badges",
+            value=(
+                "🔰 Beginner: 1-6 days\n"
+                "🌟 Rising Star: 7-29 days\n"
+                "⭐ Champion: 30-99 days\n"
+                "💎 Master: 100-364 days\n"
+                "🏆 Legend: 365+ days"
+            ),
+            inline=False
+        )
+        
+        embed.set_footer(text="Tag me (@Lupin) for a quick intro! | Keep coding! 💻")
+        
+        await interaction.response.send_message(embed=embed)
+        logger.info(f'{interaction.user} requested help')
+    
     @app_commands.command(name="poll", description="Create a poll")
     @app_commands.describe(question="The poll question", options="Poll options separated by commas (max 10)")
     async def poll(self, interaction: discord.Interaction, question: str, options: str):
