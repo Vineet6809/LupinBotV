@@ -116,7 +116,10 @@ class Streaks(commands.Cog):
                 logger.info(f'User {message.author} streak reset: {days_since} days inactive')
                 return
             
-            if days_since == 2:
+            if days_since == 2 and (day_number == expected_day or not match):
+                if not match:
+                    day_number = expected_day
+                
                 current_streak += 1
                 longest_streak = max(longest_streak, current_streak)
                 self.db.update_streak(user_id, guild_id, current_streak, longest_streak, day_number)
