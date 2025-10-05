@@ -96,11 +96,10 @@ class Streaks(commands.Cog):
         pattern = re.compile(r'#\s*day[\s-]*(\d+)', re.IGNORECASE)
         match = pattern.search(message.content)
         
-        is_daily_code_channel = message.channel.name.lower() == "daily-code"
         has_content = await self.has_media_or_code(message)
         
         if self.db.has_logged_today(user_id, guild_id):
-            if match or (is_daily_code_channel and has_content):
+            if match or has_content:
                 today_day_number = self.db.get_todays_day_number(user_id, guild_id)
                 await message.add_reaction('✅')
                 if today_day_number:
@@ -120,7 +119,7 @@ class Streaks(commands.Cog):
                 await message.channel.send(embed=embed)
             return
         
-        if not match and not (is_daily_code_channel and has_content):
+        if not match and not has_content:
             return
         
         streak_data = self.db.get_streak(user_id, guild_id)

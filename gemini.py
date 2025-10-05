@@ -50,9 +50,9 @@ def detect_code_in_image(image_bytes: bytes, mime_type: str = "image/png") -> bo
             result = CodeDetectionResult(**data)
             return result.contains_code and result.confidence > 0.5
         else:
-            logger.warning("Empty response from Gemini")
-            return False
+            logger.warning("Empty response from Gemini, accepting image as fallback")
+            return True
 
     except Exception as e:
-        logger.error(f"Failed to analyze image with Gemini: {e}")
-        return False
+        logger.error(f"Failed to analyze image with Gemini (quota/error), accepting image as fallback: {e}")
+        return True

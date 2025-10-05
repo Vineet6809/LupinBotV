@@ -122,6 +122,47 @@ class Moderation(commands.Cog):
         except Exception as e:
             logger.error(f'Error giving role: {e}')
             await interaction.response.send_message(f"❌ Failed to give role to {member.mention}.", ephemeral=True)
+    
+    @app_commands.command(name="clear", description="Clear all messages in the channel (Admin only)")
+    async def clear(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.manage_messages:
+            await interaction.response.send_message("❌ You don't have permission to manage messages.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            channel = interaction.channel
+            deleted_count = 0
+            
+            while True:
+                messages = []
+                async for message in channel.history(limit=100):
+                    messages.append(message)
+                
+                if not messages:
+                    break
+                
+                if len(messages) == 1:
+                    await messages[0].delete()
+                    deleted_count += 1
+                    break
+                else:
+                    await channel.delete_messages(messages)
+                    deleted_count += len(messages)
+            
+            embed = discord.Embed(
+                title="🧹 Channel Cleared",
+                description=f"Successfully deleted {deleted_count} messages from {channel.mention}",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="Moderator", value=interaction.user.mention, inline=True)
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            logger.info(f'{interaction.user} cleared {deleted_count} messages from #{channel.name}')
+        except Exception as e:
+            logger.error(f'Error clearing channel: {e}')
+            await interaction.followup.send(f"❌ Failed to clear messages: {str(e)}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Moderation(bot))
