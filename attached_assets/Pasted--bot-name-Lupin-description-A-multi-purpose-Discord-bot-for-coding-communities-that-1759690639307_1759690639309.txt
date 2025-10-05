@@ -1,0 +1,84 @@
+{
+  "bot_name": "Lupin",
+  "description": "A multi-purpose Discord bot for coding communities that tracks daily coding streaks, manages fun and utility commands, moderation, and server engagement.",
+  "language": "Python 3.10+",
+  "library": "discord.py",
+  "database": "SQLite",
+  "features": {
+    "streaks": {
+      "description": "Tracks daily coding streaks for each member based on messages containing #DAY-n.",
+      "commands": ["!leaderboard", "!restore @user day_no"],
+      "auto_tasks": ["daily reminder at configurable time", "weekly top streak summary"],
+      "functionality": [
+        "Store streak data per user",
+        "Increment streak if day sequence is correct",
+        "Warn user if day number is skipped or incorrect",
+        "React with 🔥 for continued streak, 🔄 for reset"
+      ]
+    },
+    "fun_commands": {
+      "description": "Provide engagement and entertainment.",
+      "commands": ["!meme", "!quote", "!joke"],
+      "functionality": [
+        "Fetch memes from an API",
+        "Fetch motivational quotes",
+        "Random jokes command"
+      ]
+    },
+    "utility_commands": {
+      "description": "Server utilities and productivity features.",
+      "commands": ["!stats", "!poll \"Question\" option1 option2", "!challenge"],
+      "functionality": [
+        "Show server stats: total members, online members, bot info",
+        "Create interactive polls",
+        "Daily coding challenges with auto-post"
+      ]
+    },
+    "moderation": {
+      "description": "Manage server moderation and roles.",
+      "commands": ["!kick @user", "!ban @user", "!mute @user", "!giverole @user RoleName"],
+      "functionality": [
+        "Admin-only commands for kicking, banning, muting",
+        "Role management",
+        "Auto-moderation (optional: spam & bad word filter)"
+      ]
+    },
+    "server_customization": {
+      "description": "Per-server configurable settings.",
+      "commands": ["!setprefix new_prefix", "!setreminder HH:MM", "!setchallengechannel #channel"],
+      "functionality": [
+        "Change bot command prefix per server",
+        "Set daily reminder time",
+        "Set which channel receives daily challenge"
+      ]
+    }
+  },
+  "structure": {
+    "main_file": "main.py",
+    "cogs_folder": "cogs/",
+    "cogs": [
+      "streaks.py",
+      "fun.py",
+      "moderation.py",
+      "utilities.py",
+      "challenges.py"
+    ],
+    "database_file": "database.db"
+  },
+  "tasks": [
+    "Daily reminder at configurable time for coding streaks",
+    "Weekly summary of top streaks",
+    "Optional daily challenge post"
+  ],
+  "requirements": [
+    "discord.py",
+    "requests (for memes, quotes)",
+    "sqlite3"
+  ],
+  "hosting_suggestions": [
+    "Local hosting for testing",
+    "Railway.app / Render.com for 24/7 uptime",
+    "VPS or Cloud VM for large servers"
+  ],
+  "notes": "Bot should be modular to allow adding or removing features easily. It should handle multiple servers and work in all text channels by default. Admin-only commands should have proper permissions checks."
+}
