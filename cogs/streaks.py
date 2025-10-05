@@ -80,14 +80,14 @@ class Streaks(commands.Cog):
                 if today_day_number:
                     embed = discord.Embed(
                         title="✅ Already Completed",
-                        description=f"{message.author.mention}, the streak is already for #DAY-{today_day_number} come back tomorrow",
+                        description=f"{message.author.mention}, you've already completed #DAY-{today_day_number} today! Come back tomorrow to continue your streak.",
                         color=discord.Color.green()
                     )
                     logger.info(f'User {message.author} tried to log again for Day {today_day_number}')
                 else:
                     embed = discord.Embed(
                         title="✅ Already Completed",
-                        description=f"{message.author.mention}, your streak is already completed for today, come back tomorrow",
+                        description=f"{message.author.mention}, you've already completed your streak for today! Come back tomorrow to continue.",
                         color=discord.Color.green()
                     )
                     logger.warning(f'User {message.author} tried to log again but day number not found in database')
