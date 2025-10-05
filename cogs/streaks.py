@@ -38,6 +38,24 @@ class Streaks(commands.Cog):
         
         return any(keyword in content.lower() for keyword in code_keywords)
     
+    def has_media_or_code(self, message) -> bool:
+        if message.attachments:
+            return True
+        if self.code_pattern.search(message.content):
+            return True
+        return False
+    
+    def calculate_days_since_last_log(self, last_log_date: str) -> int:
+        if not last_log_date:
+            return 999
+        try:
+            last_date = datetime.strptime(last_log_date, "%Y-%m-%d")
+            today = datetime.utcnow()
+            delta = (today - last_date).days
+            return delta
+        except:
+            return 999
+    
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
@@ -46,28 +64,90 @@ class Streaks(commands.Cog):
         if message.reference:
             return
         
-        pattern = re.compile(r'#\s*day[\s-]*(\d+)', re.IGNORECASE)
-        match = pattern.search(message.content)
-        
-        if not match:
-            return
-        
-        day_number = int(match.group(1))
         user_id = message.author.id
         guild_id = message.guild.id
         
         if self.db.has_logged_today(user_id, guild_id):
             return
         
+        pattern = re.compile(r'#\s*day[\s-]*(\d+)', re.IGNORECASE)
+        match = pattern.search(message.content)
+        
+        is_daily_code_channel = message.channel.name.lower() == "daily-code"
+        has_content = self.has_media_or_code(message)
+        
+        if not match and not (is_daily_code_channel and has_content):
+            return
+        
         streak_data = self.db.get_streak(user_id, guild_id)
+        
+        if match:
+            day_number = int(match.group(1))
+        else:
+            if streak_data:
+                _, _, last_log_date, last_day_number = streak_data
+                days_since = self.calculate_days_since_last_log(last_log_date)
+                day_number = last_day_number + 1
+            else:
+                day_number = 1
         
         if streak_data:
             current_streak, longest_streak, last_log_date, last_day_number = streak_data
+            days_since = self.calculate_days_since_last_log(last_log_date)
             expected_day = last_day_number + 1
             
-            if day_number == expected_day:
+            if days_since >= 3:
+                self.db.reset_streak(user_id, guild_id)
+                await message.add_reaction('🔄')
+                
+                embed = discord.Embed(
+                    title="🔄 Streak Reset",
+                    description=f"{message.author.mention}, your streak has been reset after {days_since} days of inactivity.",
+                    color=discord.Color.red()
+                )
+                embed.add_field(
+                    name="Previous Streak",
+                    value=f"{current_streak} days",
+                    inline=True
+                )
+                embed.set_footer(text="Start fresh! Post #DAY-1 or share code in #daily-code to begin again.")
+                await message.channel.send(embed=embed)
+                
+                logger.info(f'User {message.author} streak reset: {days_since} days inactive')
+                return
+            
+            if days_since == 2:
                 current_streak += 1
                 longest_streak = max(longest_streak, current_streak)
+                self.db.update_streak(user_id, guild_id, current_streak, longest_streak, day_number)
+                self.db.log_daily_entry(user_id, guild_id, day_number)
+                
+                await message.add_reaction('🧊')
+                
+                opt_out = self.db.get_user_setting(user_id, guild_id, 'opt_out_mentions')
+                if not opt_out:
+                    badge = self.get_achievement_badge(current_streak)
+                    embed = discord.Embed(
+                        title="🧊 Streak Frozen - Last Day Warning!",
+                        description=f"{message.author.mention}, you made it just in time! Your streak was about to break.",
+                        color=discord.Color.blue()
+                    )
+                    embed.add_field(name="Current Streak", value=f"{current_streak} days", inline=True)
+                    embed.add_field(name="Longest Streak", value=f"{longest_streak} days", inline=True)
+                    embed.add_field(name="Achievement", value=badge, inline=True)
+                    embed.add_field(name="⚠️ Grace Period Used", value="Don't miss tomorrow or your streak will reset!", inline=False)
+                    embed.set_footer(text=f"Stay consistent! Next: Day {day_number + 1}")
+                    await message.channel.send(embed=embed)
+                
+                logger.info(f'User {message.author} used grace period: Day {day_number} (Streak: {current_streak})')
+            
+            elif day_number == expected_day or (not match and days_since <= 1):
+                current_streak += 1
+                longest_streak = max(longest_streak, current_streak)
+                
+                if not match:
+                    day_number = expected_day
+                
                 self.db.update_streak(user_id, guild_id, current_streak, longest_streak, day_number)
                 self.db.log_daily_entry(user_id, guild_id, day_number)
                 
@@ -112,9 +192,9 @@ class Streaks(commands.Cog):
                 
                 logger.info(f'User {message.author} streak reset: Expected Day {expected_day}, got Day {day_number}')
         else:
-            if day_number == 1:
-                self.db.update_streak(user_id, guild_id, 1, 1, day_number)
-                self.db.log_daily_entry(user_id, guild_id, day_number)
+            if day_number == 1 or not match:
+                self.db.update_streak(user_id, guild_id, 1, 1, 1)
+                self.db.log_daily_entry(user_id, guild_id, 1)
                 await message.add_reaction('🔥')
                 
                 embed = discord.Embed(
