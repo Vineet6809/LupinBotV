@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from datetime import datetime ,  timedelta
+from datetime import datetime
 from typing import Optional, List, Tuple
 
 class Database:
@@ -169,12 +169,12 @@ class Database:
     def set_server_setting(self, guild_id: int, setting: str, value):
         conn = self.get_connection()
         cursor = conn.cursor()
-        value = value - timedelta(hours=5, minutes=30) if isinstance(value, datetime) else value
+        
         cursor.execute(f"""
             INSERT INTO server_settings (guild_id, {setting})
             VALUES (?, ?)
             ON CONFLICT(guild_id) DO UPDATE SET {setting} = excluded.{setting}
-        """, (guild_id, value)
+        """, (guild_id, value))
         
         conn.commit()
         conn.close()
