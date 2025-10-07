@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import app_commands
 from database import Database
 import logging
-from datetime import timedelta 
 
 logger = logging.getLogger('LupinBot.utilities')
 
@@ -96,7 +95,7 @@ class Utilities(commands.Cog):
         embed.add_field(
             name="⚙️ Server Settings (Admin Only)",
             value=(
-                "`/setreminder HH:MM` - Set daily reminder time (IST)\n"
+                "`/setreminder HH:MM` - Set daily reminder time (UTC)\n"
                 "`/setreminderchannel #channel` - Set reminder channel\n"
                 "`/setchallengechannel #channel` - Set challenge channel"
             ),
@@ -155,7 +154,7 @@ class Utilities(commands.Cog):
         logger.info(f'{interaction.user} created a poll: {question}')
     
     @app_commands.command(name="setreminder", description="Set the daily reminder time (Admin only)")
-    @app_commands.describe(time="Time in HH:MM format (24-hour, IST)")
+    @app_commands.describe(time="Time in HH:MM format (24-hour, UTC)")
     async def setreminder(self, interaction: discord.Interaction, time: str):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ You need administrator permissions to use this command.", ephemeral=True)
@@ -166,16 +165,16 @@ class Utilities(commands.Cog):
             await interaction.response.send_message("❌ Invalid time format. Use HH:MM (24-hour format).", ephemeral=True)
             return
         
-        self.db.set_server_setting(interaction.guild_id, 'reminder_time', (time-timedelta(hours=5, minutes=30)))
+        self.db.set_server_setting(interaction.guild_id, 'reminder_time', time)
         
         embed = discord.Embed(
             title="⏰ Reminder Time Updated",
-            description=f"Daily streak reminder set to **{time} IST**",
+            description=f"Daily streak reminder set to **{time} UTC**",
             color=discord.Color.green()
         )
         
         await interaction.response.send_message(embed=embed)
-        logger.info(f'{interaction.user} set reminder time to {time} IST')
+        logger.info(f'{interaction.user} set reminder time to {time} UTC')
     
     @app_commands.command(name="setchallengechannel", description="Set the channel for daily challenges (Admin only)")
     @app_commands.describe(channel="The channel to post daily challenges")
