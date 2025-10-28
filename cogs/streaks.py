@@ -56,7 +56,6 @@ class Streaks(commands.Cog):
             'binary', 'search', 'sort', 'recursion', 'dynamic'
         ]
         return any(keyword in content.lower() for keyword in code_keywords)
-        return False
 
     async def has_media_or_code(self, message) -> bool:
         """Enhanced detection for code content including files and images."""
@@ -296,7 +295,49 @@ class Streaks(commands.Cog):
         
         embed.set_footer(text="Keep coding to climb the leaderboard!")
         await interaction.response.send_message(embed=embed)
-    
+
+    @app_commands.command(name="backfill_history", description="Rebuild a user's streak history (Admin only)")
+    @app_commands.describe(user="The user whose history to backfill")
+    async def backfill_history(self, interaction: discord.Interaction, user: discord.Member):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ You need administrator permissions to use this command.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+
+        user_id = user.id
+        guild_id = interaction.guild_id
+
+        streak_data = self.db.get_streak(user_id, guild_id)
+        if not streak_data or streak_data[0] == 0:
+            await interaction.followup.send(f"❌ {user.mention} does not have an active streak to backfill.", ephemeral=True)
+            return
+
+        current_streak, _, _, _ = streak_data
+        today = datetime.utcnow().date()
+
+        try:
+            # Clear existing logs
+            self.db.clear_user_logs(user_id, guild_id)
+
+            # Log the past N days
+            for i in range(current_streak):
+                log_date = today - timedelta(days=i)
+                day_number = current_streak - i
+                self.db.log_specific_day(user_id, guild_id, log_date.strftime("%Y-%m-%d"), day_number)
+
+            embed = discord.Embed(
+                title="✅ History Rebuilt",
+                description=f"Successfully rebuilt {user.mention}'s streak history for the last {current_streak} days.",
+                color=discord.Color.green()
+            )
+            await interaction.followup.send(embed=embed)
+            logger.info(f"Admin {interaction.user} rebuilt {user.name}'s streak history for {current_streak} days.")
+
+        except Exception as e:
+            logger.error(f"Error backfilling history for {user.name}: {e}")
+            await interaction.followup.send(f"❌ An error occurred while backfilling the history: {e}", ephemeral=True)
+
     @app_commands.command(name="restore", description="Restore a user's streak (Admin only)")
     @app_commands.describe(user="The user whose streak to restore", day_number="The day number to restore to")
     async def restore(self, interaction: discord.Interaction, user: discord.Member, day_number: int):
@@ -468,7 +509,7 @@ class Streaks(commands.Cog):
         await interaction.followup.send(embed=embed)
         logger.info(f'{interaction.user} viewed streak calendar')
     
-    @app_commands.command(name="use_freeze", description="Use a streak freeze to protect your streak (like Duolingo)")
+    @app_codes.command(name="use_freeze", description="Use a streak freeze to protect your streak (like Duolingo)")
     async def use_freeze(self, interaction: discord.Interaction):
         freeze_count = self.db.get_streak_freeze(interaction.user.id, interaction.guild_id)
         

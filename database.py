@@ -315,3 +315,25 @@ class Database:
         
         conn.commit()
         conn.close()
+
+    def clear_user_logs(self, user_id: int, guild_id: int):
+        """Delete all of a user's daily logs."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM daily_logs 
+            WHERE user_id = ? AND guild_id = ?
+        ''', (user_id, guild_id))
+        conn.commit()
+        conn.close()
+
+    def log_specific_day(self, user_id: int, guild_id: int, date: str, day_number: int):
+        """Log a specific day in the past for a user."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO daily_logs (user_id, guild_id, log_date, day_number)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, guild_id, date, day_number))
+        conn.commit()
+        conn.close()

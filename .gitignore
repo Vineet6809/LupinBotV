@@ -81,3 +81,5 @@ Thumbs.db
 .dmypy.json
 dmypy.json
 
+#idx
+.idx
