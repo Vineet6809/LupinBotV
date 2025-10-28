@@ -37,6 +37,25 @@ class Streaks(commands.Cog):
             return False
         if self.code_pattern.search(content):
             return True
+        # Enhanced code keywords
+        code_keywords = [
+            'def ', 'class ', 'import ', 'function ', 'const ', 'let ', 'var ',
+            'public ', 'private ', 'void ', 'int ', 'string ', 'return ',
+            'if ', 'else ', 'for ', 'while ', 'try ', 'catch ', '#include',
+            'console.log', 'print(', 'System.out', 'printf', 'cout',
+            'function(', '=>', 'async', 'await', 'promise',
+            'main(', 'public static void', 'namespace', 'using ',
+            'require(', 'module.exports', 'export ', 'import ',
+            'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE',
+            'html', 'css', 'javascript', 'python', 'java', 'cpp', 'c++',
+            'react', 'vue', 'angular', 'node', 'express', 'django',
+            'sql', 'mongodb', 'mysql', 'postgresql',
+            'git', 'commit', 'push', 'pull', 'branch',
+            'api', 'endpoint', 'request', 'response', 'json',
+            'array', 'list', 'dictionary', 'hashmap', 'tree',
+            'binary', 'search', 'sort', 'recursion', 'dynamic'
+        ]
+        return any(keyword in content.lower() for keyword in code_keywords)
         return False
 
     async def has_media_or_code(self, message) -> bool:
