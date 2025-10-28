@@ -1,19 +1,25 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 from database import Database
 import logging
+import re
+from datetime import datetime, time
 
 logger = logging.getLogger('LupinBot.utilities')
-
 
 class Utilities(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
         self.db = Database()
-    
+        self.daily_reminder.start()
+
+    def cog_unload(self):
+        self.daily_reminder.cancel()
+
     def get_all_commands_by_category(self):
+        # ... (rest of the function is unchanged)
         """Dynamically collect all registered commands and organize by category."""
         commands_by_category = {
             "Streak Tracking": [],
@@ -64,341 +70,114 @@ class Utilities(commands.Cog):
         
         return commands_by_category
 
-    @app_commands.command(name="stats", description="Show server statistics")
-    async def stats(self, interaction: discord.Interaction):
-        guild = interaction.guild
+    @tasks.loop(time=time(hour=0, minute=0)) # Default time, will be configured
+    async def daily_reminder(self):
+        logger.info("Checking for daily reminders...")
+        all_servers = self.db.get_all_server_settings()
+        for guild_id, settings in all_servers.items():
+            if settings.get('reminder_enabled', False):
+                try:
+                    guild = self.bot.get_guild(guild_id)
+                    if not guild:
+                        continue
 
-        total_members = guild.member_count
-        online_members = sum(1 for member in guild.members
-                             if member.status != discord.Status.offline)
-        text_channels = len(guild.text_channels)
-        voice_channels = len(guild.voice_channels)
-        roles = len(guild.roles)
+                    reminder_time_str = settings.get('reminder_time')
+                    if not reminder_time_str:
+                        continue
+                    
+                    # Convert 12-hour format to 24-hour for comparison
+                    try:
+                        reminder_time = datetime.strptime(reminder_time_str, "%I:%M %p").time()
+                    except ValueError:
+                        try:
+                            reminder_time = datetime.strptime(reminder_time_str, "%H:%M").time()
+                        except ValueError:
+                            logger.warning(f"Invalid time format in DB for guild {guild_id}: {reminder_time_str}")
+                            continue
+                    
+                    # Check if it's time to send the reminder
+                    now_utc = datetime.utcnow().time()
+                    if now_utc.hour == reminder_time.hour and now_utc.minute == reminder_time.minute:
+                        channel_id = settings.get('reminder_channel_id')
+                        if not channel_id:
+                            logger.warning(f"Reminder channel not set for guild {guild_id}")
+                            continue
 
-        embed = discord.Embed(title=f"📊 {guild.name} Statistics",
-                              color=discord.Color.blue())
+                        channel = guild.get_channel(channel_id)
+                        if not channel:
+                            logger.warning(f"Reminder channel not found for guild {guild_id}")
+                            continue
 
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
+                        # Get users who haven't logged today
+                        users_to_remind = self.db.get_users_to_remind(guild_id)
+                        if not users_to_remind:
+                            logger.info(f"No users to remind in {guild.name}")
+                            continue
 
-        embed.add_field(name="👥 Total Members",
-                        value=str(total_members),
-                        inline=True)
-        embed.add_field(name="🟢 Online",
-                        value=str(online_members),
-                        inline=True)
-        embed.add_field(name="📝 Text Channels",
-                        value=str(text_channels),
-                        inline=True)
-        embed.add_field(name="🔊 Voice Channels",
-                        value=str(voice_channels),
-                        inline=True)
-        embed.add_field(name="🎭 Roles", value=str(roles), inline=True)
-        embed.add_field(
-            name="👑 Owner",
-            value=guild.owner.mention if guild.owner else "Unknown",
-            inline=True)
+                        mentions = [f'<@{user_id}>' for user_id in users_to_remind]
+                        
+                        embed = discord.Embed(
+                            title="🔥 Daily Streak Reminder!",
+                            description=(
+                                f"Hey {', '.join(mentions)}! Don't forget to post your coding progress today to keep your streak alive. "
+                                f"You can post code snippets, GitHub links, or even screenshots of your work in the #daily-code channel.\n\n"
+                                f"**Keep that fire going!** 🔥"
+                            ),
+                            color=discord.Color.orange()
+                        )
+                        embed.set_footer(text="Consistency is key to mastery. You can do it!")
+                        await channel.send(embed=embed)
+                        logger.info(f"Sent reminders to {len(users_to_remind)} users in {guild.name}")
 
-        embed.set_footer(text=f"Server ID: {guild.id}")
+                except Exception as e:
+                    logger.error(f"Error sending reminder for guild {guild_id}: {e}")
 
-        await interaction.response.send_message(embed=embed)
-        logger.info(f'{interaction.user} requested server stats')
-    
-    @app_commands.command(name="serverstats", description="Show server coding statistics")
-    async def serverstats(self, interaction: discord.Interaction):
-        """Show server-wide coding statistics."""
-        await interaction.response.defer()
-        
-        # Get server stats from database
-        total_users, active_today, total_days, avg_streak = self.db.get_server_stats(interaction.guild_id)
-        
-        embed = discord.Embed(
-            title=f"📊 {interaction.guild.name} Coding Statistics",
-            description="Community coding progress overview",
-            color=discord.Color.blue()
-        )
-        
-        if interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
-        
-        embed.add_field(name="👥 Total Coders", value=str(total_users), inline=True)
-        embed.add_field(name="🔥 Active Today", value=str(active_today), inline=True)
-        embed.add_field(name="📈 Total Days Coded", value=str(total_days), inline=True)
-        embed.add_field(name="📊 Average Streak", value=f"{avg_streak} days", inline=True)
-        
-        # Get activity percentage
-        if total_users > 0:
-            activity_pct = round((active_today / total_users) * 100, 1)
-            embed.add_field(name="💪 Activity Rate", value=f"{activity_pct}%", inline=True)
-        
-        embed.set_footer(text="Keep coding to climb the stats! 🚀")
-        
-        await interaction.followup.send(embed=embed)
-        logger.info(f'{interaction.user} requested server stats')
+    @daily_reminder.before_loop
+    async def before_daily_reminder(self):
+        await self.bot.wait_until_ready()
+        logger.info("Starting daily reminder loop...")
 
-    @app_commands.command(name="help",
-                          description="Show all available commands")
-    async def help(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="🦊 LupinBot - Complete Command Guide",
-            description="Your **AI-powered coding streak companion**! 🚀\n\nTrack your coding streaks with smart detection, motivational features, and fun challenges designed specifically for developers.",
-            color=discord.Color.blue()
-        )
-        
-        # Add thumbnail
-        if interaction.guild and interaction.guild.icon:
-            embed.set_thumbnail(url=interaction.guild.icon.url)
-        
-        # Dynamically collect all commands
-        commands_by_category = self.get_all_commands_by_category()
-        
-        # Emoji mapping for categories
-        category_emojis = {
-            "Streak Tracking": "🔥",
-            "Fun & Motivation": "🎮",
-            "Server Statistics": "📊",
-            "Moderation": "🔨",
-            "Server Configuration": "⚙️",
-            "Challenges": "💻"
-        }
-        
-        # Build fields dynamically from registered commands
-        for category, commands in commands_by_category.items():
-            if commands:
-                emoji = category_emojis.get(category, "📌")
-                value_parts = []
-                
-                # Special formatting for Streak Tracking
-                if category == "Streak Tracking":
-                    value_parts.append("**🎯 How it works**: Just share code daily! No need for #DAY-n.\n")
-                
-                for cmd_name, cmd_description in commands:
-                    value_parts.append(f"`/{cmd_name}` - {cmd_description}")
-                
-                if value_parts:
-                    embed.add_field(
-                        name=f"{emoji} {category}",
-                        value="\n".join(value_parts),
-                        inline=False
-                    )
-        
-        # AI FEATURES SECTION
-        embed.add_field(
-            name="🤖 **AI-Powered Features**",
-            value=(
-                "✨ **Smart Detection**: Automatically detects code in messages\n"
-                "📁 **File Analysis**: Supports 20+ programming languages\n"
-                "🖼️ **Image Recognition**: Reads code from screenshots\n"
-                "🔍 **Pattern Matching**: Understands #DAY-1, day 2, etc.\n"
-                "⚡ **Instant Processing**: Real-time streak updates"
-            ),
-            inline=False
-        )
-        
-        # ACHIEVEMENTS SECTION
-        embed.add_field(
-            name="🏆 **Achievement Badges**",
-            value=(
-                "🔰 **Beginner** - 1-6 days\n"
-                "🌟 **Rising Star** - 7-29 days\n"
-                "⭐ **Champion** - 30-99 days\n"
-                "💎 **Master** - 100-364 days\n"
-                "🏆 **Legend** - 365+ days"
-            ),
-            inline=True
-        )
-        
-        # PROTECTION SECTION
-        embed.add_field(
-            name="🛡️ **Streak Protection**",
-            value=(
-                "❄️ **Grace Period**: 2-day buffer\n"
-                "🧊 **Freeze System**: Protect your streak\n"
-                "🔄 **Restore**: Recover lost streaks\n"
-                "📅 **Calendar View**: Visual progress tracking"
-            ),
-            inline=True
-        )
-        
-        # TIPS SECTION
-        embed.add_field(
-            name="💡 **Pro Tips**",
-            value=(
-                "• **No #DAY needed**: Just share any code!\n"
-                "• **File uploads**: `.py`, `.js`, `.java`, `.cpp`, etc.\n"
-                "• **Screenshots**: I can read code in images\n"
-                "• **Flexible**: Works with any coding activity\n"
-                "• **Consistent**: Aim for daily coding habits! 🎯"
-            ),
-            inline=False
-        )
-        
-        # QUICK START SECTION
-        embed.add_field(
-            name="🚀 **Quick Start**",
-            value=(
-                "1️⃣ Share code in #daily-code\n"
-                "2️⃣ Upload files or screenshots\n"
-                "3️⃣ Use `/mystats` to check progress\n"
-                "4️⃣ Build your streak daily! 🔥"
-            ),
-            inline=False
-        )
-        
-        embed.set_footer(
-            text="Ready to start your coding journey? Share some code now! 💻 | Tag @Lupin for introduction"
-        )
-        embed.timestamp = discord.utils.utcnow()
-
-        await interaction.response.send_message(embed=embed)
-        logger.info(f'{interaction.user} requested help')
-
-    @app_commands.command(name="poll", description="Create a poll")
-    @app_commands.describe(question="The poll question",
-                           options="Poll options separated by commas (max 10)")
-    async def poll(self, interaction: discord.Interaction, question: str,
-                   options: str):
-        option_list = [opt.strip() for opt in options.split(',')]
-
-        if len(option_list) < 2:
-            await interaction.response.send_message(
-                "❌ You need at least 2 options for a poll!", ephemeral=True)
-            return
-
-        if len(option_list) > 10:
-            await interaction.response.send_message(
-                "❌ Maximum 10 options allowed!", ephemeral=True)
-            return
-
-        embed = discord.Embed(title="📊 Poll",
-                              description=question,
-                              color=discord.Color.blue())
-
-        emojis = [
-            "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"
-        ]
-
-        for idx, option in enumerate(option_list):
-            embed.add_field(name=f"{emojis[idx]} Option {idx + 1}",
-                            value=option,
-                            inline=False)
-
-        embed.set_footer(text=f"Poll created by {interaction.user.name}")
-
-        await interaction.response.send_message(embed=embed)
-
-        message = await interaction.original_response()
-        for idx in range(len(option_list)):
-            await message.add_reaction(emojis[idx])
-
-        logger.info(f'{interaction.user} created a poll: {question}')
-
-    @app_commands.command(
-        name="setreminder",
-        description="Set the daily reminder time (Admin only)")
-    @app_commands.describe(time="Time in HH:MM format (24-hour, IST)")
+    @app_commands.command(name="setreminder", description="Set the daily reminder time (Admin only, 12-hour or 24-hour format)")
+    @app_commands.describe(time="Time in 'HH:MM AM/PM' or 'HH:MM' (24h) format (e.g., '08:30 PM' or '20:30')")
     async def setreminder(self, interaction: discord.Interaction, time: str):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ You need administrator permissions to use this command.",
-                ephemeral=True)
+            await interaction.response.send_message("❌ You need administrator permissions to use this command.", ephemeral=True)
             return
 
-        import re
-        if not re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', time):
-            await interaction.response.send_message(
-                "❌ Invalid time format. Use HH:MM (24-hour format).",
-                ephemeral=True)
+        time_str_cleaned = time.strip().upper()
+        
+        # Regex for 12-hour and 24-hour format
+        match_12hr = re.match(r'^(1[0-2]|0?[1-9]):([0-5][0-9])\s*(AM|PM)$', time_str_cleaned)
+        match_24hr = re.match(r'^([01]?[0-9]|2[0-3]):([0-5][0-9])$', time_str_cleaned)
+        
+        if not match_12hr and not match_24hr:
+            await interaction.response.send_message("❌ Invalid time format. Use 'HH:MM AM/PM' or 'HH:MM' (24h).", ephemeral=True)
             return
 
-        self.db.set_server_setting(interaction.guild_id, 'reminder_time', time)
+        # Store the validated time string
+        valid_time_str = time_str_cleaned
+        if match_12hr:
+            # Convert to a standard format if needed, but storing as is is fine
+            hour, minute, period = match_12hr.groups()
+            valid_time_str = f"{int(hour):02d}:{minute} {period}"
+        elif match_24hr:
+            hour, minute = match_24hr.groups()
+            # Convert to 12-hour format for consistency in display
+            d = datetime.strptime(f"{hour}:{minute}", "%H:%M")
+            valid_time_str = d.strftime("%I:%M %p")
+
+
+        self.db.set_server_setting(interaction.guild_id, 'reminder_time', valid_time_str)
+        self.db.set_server_setting(interaction.guild_id, 'reminder_enabled', True)
 
         embed = discord.Embed(
             title="⏰ Reminder Time Updated",
-            description=f"Daily streak reminder set to **{time} IST**",
-            color=discord.Color.green())
-
+            description=f"The daily streak reminder has been set to **{valid_time_str}**.",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Next Steps", value="Make sure you have set a reminder channel using `/setreminderchannel`.")
         await interaction.response.send_message(embed=embed)
-        logger.info(f'{interaction.user} set reminder time to {time} IST')
-
-    @app_commands.command(
-        name="setchallengechannel",
-        description="Set the channel for daily challenges (Admin only)")
-    @app_commands.describe(channel="The channel to post daily challenges")
-    async def setchallengechannel(self, interaction: discord.Interaction,
-                                  channel: discord.TextChannel):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ You need administrator permissions to use this command.",
-                ephemeral=True)
-            return
-
-        self.db.set_server_setting(interaction.guild_id,
-                                   'challenge_channel_id', channel.id)
-
-        embed = discord.Embed(
-            title="✅ Challenge Channel Set",
-            description=f"Daily challenges will be posted in {channel.mention}",
-            color=discord.Color.green())
-
-        await interaction.response.send_message(embed=embed)
-        logger.info(
-            f'{interaction.user} set challenge channel to {channel.name}')
-
-    @app_commands.command(
-        name="setreminderchannel",
-        description="Set the channel for daily reminders (Admin only)")
-    @app_commands.describe(channel="The channel to post daily reminders")
-    async def setreminderchannel(self, interaction: discord.Interaction,
-                                 channel: discord.TextChannel):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ You need administrator permissions to use this command.",
-                ephemeral=True)
-            return
-
-        self.db.set_server_setting(interaction.guild_id, 'reminder_channel_id',
-                                   channel.id)
-
-        embed = discord.Embed(
-            title="✅ Reminder Channel Set",
-            description=f"Daily reminders will be posted in {channel.mention}",
-            color=discord.Color.green())
-
-        await interaction.response.send_message(embed=embed)
-        logger.info(
-            f'{interaction.user} set reminder channel to {channel.name}')
-    
-    @app_commands.command(name="sync_commands", description="Sync bot commands with Discord (Admin only)")
-    async def sync_commands(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ You need administrator permissions to use this command.",
-                ephemeral=True)
-            return
-        
-        try:
-            synced = await interaction.client.tree.sync()
-            embed = discord.Embed(
-                title="✅ Commands Synced",
-                description=f"Successfully synced {len(synced)} slash commands with Discord",
-                color=discord.Color.green())
-            
-            # List all synced commands
-            command_list = "\n".join([f"`/{cmd.name}` - {cmd.description}" for cmd in synced[:10]])
-            if len(synced) > 10:
-                command_list += f"\n*...and {len(synced) - 10} more commands*"
-            
-            embed.add_field(name="Synced Commands", value=command_list, inline=False)
-            
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            logger.info(f'{interaction.user} manually synced commands')
-        except Exception as e:
-            logger.error(f'Failed to sync commands: {e}')
-            await interaction.response.send_message(
-                f"❌ Failed to sync commands: {str(e)}",
-                ephemeral=True)
-
+        logger.info(f'{interaction.user} set reminder time to {valid_time_str}')
 
 async def setup(bot):
     await bot.add_cog(Utilities(bot))
