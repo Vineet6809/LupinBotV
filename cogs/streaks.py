@@ -16,6 +16,7 @@ class Streaks(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = Database()
+        self.code_pattern = re.compile(r'```[\s\S]*?```|`[^`]+`')
         self.user_message_cache = {}  # Cache for messages
 
     def get_achievement_badge(self, streak: int) -> str:
@@ -30,89 +31,54 @@ class Streaks(commands.Cog):
         else:
             return "🔰 Beginner"
 
-    def detect_code_heuristically(self, content: str) -> bool:
-        """
-        Detects code in a message using a language-agnostic heuristic scoring model.
-        This serves as a fallback if the AI detection fails.
-        """
+    def detect_code(self, content: str) -> bool:
+        """Detects code blocks in a message."""
         if not content:
             return False
-
-        score = 0
-        
-        # 1. Code Block Formatter (Highest Weight)
-        if re.search(r'```[\s\S]*?```|`[^`]+`', content):
-            score += 5
-
-        # 2. Symbol-to-Word Ratio
-        words = content.split()
-        symbols = len(re.findall(r'[(){}\[\]=<>!&|;:,+\-*%/]', content))
-        if len(words) > 0:
-            ratio = symbols / len(words)
-            if ratio > 0.1:
-                score += 2
-            if ratio > 0.2:
-                score += 1
-
-        # 3. Indentation and Multiple Lines
-        lines = content.split('\n')
-        if len(lines) > 2:
-            score += 1
-            # Check for consistent indentation (spaces or tabs)
-            indentations = [len(line) - len(line.lstrip()) for line in lines if line.strip()]
-            if len(set(indentations)) > 1:
-                score += 1
-
-        # 4. CamelCase or snake_case
-        if re.search(r'\b[a-z]+(?:[A-Z][a-z]*)+\b', content) or re.search(r'\b[a-z]+(?:_[a-z]+)+\b', content):
-            score += 1
-            
-        # 5. Line Length Variance
-        line_lengths = [len(line) for line in lines]
-        if line_lengths and max(line_lengths) > 40 and min(line_lengths) < 20:
-            score +=1
-
-        return score >= 3
-
-    async def detect_code(self, content: str) -> bool:
-        """
-        Detects code in a message using a hybrid approach: AI-first with a heuristic fallback.
-        """
-        if not content:
-            return False
-
-        try:
-            # AI-powered detection
-            is_code = await asyncio.to_thread(gemini.detect_code_in_text, content)
-            if is_code:
-                logger.info("Code detected by Gemini AI.")
-                return True
-        except Exception as e:
-            logger.error(f"Gemini AI detection failed: {e}. Using heuristic fallback.")
-            # Fallback to heuristic model
-            if self.detect_code_heuristically(content):
-                logger.info("Code detected by heuristic fallback.")
-                return True
-        
+        if self.code_pattern.search(content):
+            return True
+        # Enhanced code keywords
+        code_keywords = [
+            'def ', 'class ', 'import ', 'function ', 'const ', 'let ', 'var ',
+            'public ', 'private ', 'void ', 'int ', 'string ', 'return ',
+            'if ', 'else ', 'for ', 'while ', 'try ', 'catch ', '#include',
+            'console.log', 'print(', 'System.out', 'printf', 'cout',
+            'function(', '=>', 'async', 'await', 'promise',
+            'main(', 'public static void', 'namespace', 'using ',
+            'require(', 'module.exports', 'export ', 'import ',
+            'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE',
+            'html', 'css', 'javascript', 'python', 'java', 'cpp', 'c++',
+            'react', 'vue', 'angular', 'node', 'express', 'django',
+            'sql', 'mongodb', 'mysql', 'postgresql',
+            'git', 'commit', 'push', 'pull', 'branch',
+            'api', 'endpoint', 'request', 'response', 'json',
+            'array', 'list', 'dictionary', 'hashmap', 'tree',
+            'binary', 'search', 'sort', 'recursion', 'dynamic'
+        ]
+        return any(keyword in content.lower() for keyword in code_keywords)
         return False
 
     async def has_media_or_code(self, message) -> bool:
-        """Enhanced detection for code content including files, images, and raw text."""
-        # 1. Check message content with the hybrid detector
-        if await self.detect_code(message.content):
+        """Enhanced detection for code content including files and images."""
+        if self.detect_code(message.content):
             return True
         
-        # 2. Check attachments (files and images)
         if message.attachments:
             for attachment in message.attachments:
-                # Check for common code file extensions
                 if attachment.filename:
-                    code_extensions = ['.py', '.js', '.ts', '.java', '.cpp', '.c', '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt', '.scala', '.r', '.html', '.css', '.scss', '.sass', '.less', '.xml', '.json', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.sql', '.sh', '.bash', '.ps1', '.bat', '.cmd', '.md', '.txt', '.log', '.conf', '.config']
+                    code_extensions = [
+                        '.py', '.js', '.ts', '.java', '.cpp', '.c', '.cs', '.php',
+                        '.rb', '.go', '.rs', '.swift', '.kt', '.scala', '.r',
+                        '.html', '.css', '.scss', '.sass', '.less', '.xml',
+                        '.json', '.yaml', '.yml', '.toml', '.ini', '.cfg',
+                        '.sql', '.sh', '.bash', '.ps1', '.bat', '.cmd',
+                        '.md', '.txt', '.log', '.conf', '.config'
+                    ]
+                    
                     if any(attachment.filename.lower().endswith(ext) for ext in code_extensions):
                         logger.info(f'Code file detected: {attachment.filename}')
                         return True
                 
-                # Analyze images with Gemini AI
                 if attachment.content_type and attachment.content_type.startswith('image/'):
                     try:
                         async with aiohttp.ClientSession() as session:
@@ -120,7 +86,11 @@ class Streaks(commands.Cog):
                                 if resp.status == 200:
                                     image_bytes = await resp.read()
                                     mime_type = attachment.content_type
-                                    has_code = await asyncio.to_thread(gemini.detect_code_in_image, image_bytes, mime_type)
+                                    has_code = await asyncio.to_thread(
+                                        gemini.detect_code_in_image, 
+                                        image_bytes, 
+                                        mime_type
+                                    )
                                     if has_code:
                                         logger.info(f'Image contains code (verified by Gemini): {attachment.filename}')
                                         return True
@@ -128,11 +98,9 @@ class Streaks(commands.Cog):
                                         logger.info(f'Image does not contain code (verified by Gemini): {attachment.filename}')
                     except Exception as e:
                         logger.error(f'Error analyzing image with Gemini: {e}')
-                        # Assume it has code to be safe on error
                         logger.info(f'Assuming image contains code due to Gemini error: {attachment.filename}')
                         return True
             return False
-            
         return False
 
     def calculate_days_since_last_log(self, last_log_date: str) -> int:
@@ -293,6 +261,8 @@ class Streaks(commands.Cog):
         # Daily code channel logic
         elif "daily-code" in message.channel.name and has_code:
              await self.process_streak_message(message, None)
+
+
     
     @app_commands.command(name="leaderboard", description="Show the top coding streaks in this server")
     async def leaderboard(self, interaction: discord.Interaction):
