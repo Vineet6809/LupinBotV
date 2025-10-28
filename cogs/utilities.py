@@ -12,6 +12,57 @@ class Utilities(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = Database()
+    
+    def get_all_commands_by_category(self):
+        """Dynamically collect all registered commands and organize by category."""
+        commands_by_category = {
+            "Streak Tracking": [],
+            "Fun & Motivation": [],
+            "Server Statistics": [],
+            "Moderation": [],
+            "Server Configuration": [],
+            "Challenges": []
+        }
+        
+        # Define command categorization
+        category_mapping = {
+            "leaderboard": "Streak Tracking",
+            "mystats": "Streak Tracking",
+            "streaks_history": "Streak Tracking",
+            "streak_calendar": "Streak Tracking",
+            "use_freeze": "Streak Tracking",
+            "restore": "Streak Tracking",
+            "meme": "Fun & Motivation",
+            "quote": "Fun & Motivation",
+            "joke": "Fun & Motivation",
+            "stats": "Server Statistics",
+            "serverstats": "Server Statistics",
+            "poll": "Server Statistics",
+            "kick": "Moderation",
+            "ban": "Moderation",
+            "mute": "Moderation",
+            "clear": "Moderation",
+            "giverole": "Moderation",
+            "setreminder": "Server Configuration",
+            "setreminderchannel": "Server Configuration",
+            "setchallengechannel": "Server Configuration",
+            "sync_commands": "Server Configuration",
+            "challenge": "Challenges"
+        }
+        
+        # Get all registered commands from the bot tree
+        for command in self.bot.tree.walk_commands():
+            if isinstance(command, app_commands.Command):
+                cmd_name = command.name
+                cmd_description = command.description
+                
+                # Determine category
+                category = category_mapping.get(cmd_name, "Other")
+                
+                if category in commands_by_category:
+                    commands_by_category[category].append((cmd_name, cmd_description))
+        
+        return commands_by_category
 
     @app_commands.command(name="stats", description="Show server statistics")
     async def stats(self, interaction: discord.Interaction):
@@ -52,63 +103,152 @@ class Utilities(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
         logger.info(f'{interaction.user} requested server stats')
+    
+    @app_commands.command(name="serverstats", description="Show server coding statistics")
+    async def serverstats(self, interaction: discord.Interaction):
+        """Show server-wide coding statistics."""
+        await interaction.response.defer()
+        
+        # Get server stats from database
+        total_users, active_today, total_days, avg_streak = self.db.get_server_stats(interaction.guild_id)
+        
+        embed = discord.Embed(
+            title=f"📊 {interaction.guild.name} Coding Statistics",
+            description="Community coding progress overview",
+            color=discord.Color.blue()
+        )
+        
+        if interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+        
+        embed.add_field(name="👥 Total Coders", value=str(total_users), inline=True)
+        embed.add_field(name="🔥 Active Today", value=str(active_today), inline=True)
+        embed.add_field(name="📈 Total Days Coded", value=str(total_days), inline=True)
+        embed.add_field(name="📊 Average Streak", value=f"{avg_streak} days", inline=True)
+        
+        # Get activity percentage
+        if total_users > 0:
+            activity_pct = round((active_today / total_users) * 100, 1)
+            embed.add_field(name="💪 Activity Rate", value=f"{activity_pct}%", inline=True)
+        
+        embed.set_footer(text="Keep coding to climb the stats! 🚀")
+        
+        await interaction.followup.send(embed=embed)
+        logger.info(f'{interaction.user} requested server stats')
 
     @app_commands.command(name="help",
                           description="Show all available commands")
     async def help(self, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="🤖 Lupin Bot - Command Help",
-            description="Here are all the commands you can use with Lupin!",
-            color=discord.Color.blue())
-
+            title="🦊 LupinBot - Complete Command Guide",
+            description="Your **AI-powered coding streak companion**! 🚀\n\nTrack your coding streaks with smart detection, motivational features, and fun challenges designed specifically for developers.",
+            color=discord.Color.blue()
+        )
+        
+        # Add thumbnail
+        if interaction.guild and interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+        
+        # Dynamically collect all commands
+        commands_by_category = self.get_all_commands_by_category()
+        
+        # Emoji mapping for categories
+        category_emojis = {
+            "Streak Tracking": "🔥",
+            "Fun & Motivation": "🎮",
+            "Server Statistics": "📊",
+            "Moderation": "🔨",
+            "Server Configuration": "⚙️",
+            "Challenges": "💻"
+        }
+        
+        # Build fields dynamically from registered commands
+        for category, commands in commands_by_category.items():
+            if commands:
+                emoji = category_emojis.get(category, "📌")
+                value_parts = []
+                
+                # Special formatting for Streak Tracking
+                if category == "Streak Tracking":
+                    value_parts.append("**🎯 How it works**: Just share code daily! No need for #DAY-n.\n")
+                
+                for cmd_name, cmd_description in commands:
+                    value_parts.append(f"`/{cmd_name}` - {cmd_description}")
+                
+                if value_parts:
+                    embed.add_field(
+                        name=f"{emoji} {category}",
+                        value="\n".join(value_parts),
+                        inline=False
+                    )
+        
+        # AI FEATURES SECTION
         embed.add_field(
-            name="🔥 Streak Tracking",
-            value=
-            ("**Post #DAY-n** - Track your daily coding streak (e.g., #DAY-1, #DAY-2)\n"
-             "`/leaderboard` - View top 10 coders in the server\n"
-             "`/mystats` - View your personal coding statistics\n"
-             "`/restore @user day` - Restore a user's streak (Admin only)"),
-            inline=False)
-
-        embed.add_field(name="🎮 Fun Commands",
-                        value=("`/meme` - Get a random programming meme\n"
-                               "`/quote` - Get an inspirational quote\n"
-                               "`/joke` - Get a programming joke\n"
-                               "`/challenge` - Get a random coding challenge"),
-                        inline=False)
-
+            name="🤖 **AI-Powered Features**",
+            value=(
+                "✨ **Smart Detection**: Automatically detects code in messages\n"
+                "📁 **File Analysis**: Supports 20+ programming languages\n"
+                "🖼️ **Image Recognition**: Reads code from screenshots\n"
+                "🔍 **Pattern Matching**: Understands #DAY-1, day 2, etc.\n"
+                "⚡ **Instant Processing**: Real-time streak updates"
+            ),
+            inline=False
+        )
+        
+        # ACHIEVEMENTS SECTION
         embed.add_field(
-            name="🛠️ Utility Commands",
-            value=("`/stats` - Show server statistics\n"
-                   "`/poll question, option1, option2...` - Create a poll\n"
-                   "`/help` - Show this help message"),
-            inline=False)
-
+            name="🏆 **Achievement Badges**",
+            value=(
+                "🔰 **Beginner** - 1-6 days\n"
+                "🌟 **Rising Star** - 7-29 days\n"
+                "⭐ **Champion** - 30-99 days\n"
+                "💎 **Master** - 100-364 days\n"
+                "🏆 **Legend** - 365+ days"
+            ),
+            inline=True
+        )
+        
+        # PROTECTION SECTION
         embed.add_field(
-            name="🔨 Moderation (Admin Only)",
-            value=("`/kick @user reason` - Kick a member\n"
-                   "`/ban @user reason` - Ban a member\n"
-                   "`/mute @user duration reason` - Timeout a member\n"
-                   "`/giverole @user role` - Assign a role to a member"),
-            inline=False)
-
+            name="🛡️ **Streak Protection**",
+            value=(
+                "❄️ **Grace Period**: 2-day buffer\n"
+                "🧊 **Freeze System**: Protect your streak\n"
+                "🔄 **Restore**: Recover lost streaks\n"
+                "📅 **Calendar View**: Visual progress tracking"
+            ),
+            inline=True
+        )
+        
+        # TIPS SECTION
         embed.add_field(
-            name="⚙️ Server Settings (Admin Only)",
-            value=("`/setreminder HH:MM` - Set daily reminder time (IST)\n"
-                   "`/setreminderchannel #channel` - Set reminder channel\n"
-                   "`/setchallengechannel #channel` - Set challenge channel"),
-            inline=False)
-
-        embed.add_field(name="🏆 Achievement Badges",
-                        value=("🔰 Beginner: 1-6 days\n"
-                               "🌟 Rising Star: 7-29 days\n"
-                               "⭐ Champion: 30-99 days\n"
-                               "💎 Master: 100-364 days\n"
-                               "🏆 Legend: 365+ days"),
-                        inline=False)
-
+            name="💡 **Pro Tips**",
+            value=(
+                "• **No #DAY needed**: Just share any code!\n"
+                "• **File uploads**: `.py`, `.js`, `.java`, `.cpp`, etc.\n"
+                "• **Screenshots**: I can read code in images\n"
+                "• **Flexible**: Works with any coding activity\n"
+                "• **Consistent**: Aim for daily coding habits! 🎯"
+            ),
+            inline=False
+        )
+        
+        # QUICK START SECTION
+        embed.add_field(
+            name="🚀 **Quick Start**",
+            value=(
+                "1️⃣ Share code in #daily-code\n"
+                "2️⃣ Upload files or screenshots\n"
+                "3️⃣ Use `/mystats` to check progress\n"
+                "4️⃣ Build your streak daily! 🔥"
+            ),
+            inline=False
+        )
+        
         embed.set_footer(
-            text="Tag me (@Lupin) for a quick intro! | Keep coding! 💻")
+            text="Ready to start your coding journey? Share some code now! 💻 | Tag @Lupin for introduction"
+        )
+        embed.timestamp = discord.utils.utcnow()
 
         await interaction.response.send_message(embed=embed)
         logger.info(f'{interaction.user} requested help')
@@ -228,6 +368,36 @@ class Utilities(commands.Cog):
         await interaction.response.send_message(embed=embed)
         logger.info(
             f'{interaction.user} set reminder channel to {channel.name}')
+    
+    @app_commands.command(name="sync_commands", description="Sync bot commands with Discord (Admin only)")
+    async def sync_commands(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ You need administrator permissions to use this command.",
+                ephemeral=True)
+            return
+        
+        try:
+            synced = await interaction.client.tree.sync()
+            embed = discord.Embed(
+                title="✅ Commands Synced",
+                description=f"Successfully synced {len(synced)} slash commands with Discord",
+                color=discord.Color.green())
+            
+            # List all synced commands
+            command_list = "\n".join([f"`/{cmd.name}` - {cmd.description}" for cmd in synced[:10]])
+            if len(synced) > 10:
+                command_list += f"\n*...and {len(synced) - 10} more commands*"
+            
+            embed.add_field(name="Synced Commands", value=command_list, inline=False)
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            logger.info(f'{interaction.user} manually synced commands')
+        except Exception as e:
+            logger.error(f'Failed to sync commands: {e}')
+            await interaction.response.send_message(
+                f"❌ Failed to sync commands: {str(e)}",
+                ephemeral=True)
 
 
 async def setup(bot):

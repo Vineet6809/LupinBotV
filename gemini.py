@@ -9,7 +9,23 @@ from pydantic import BaseModel
 
 logger = logging.getLogger('LupinBot.gemini')
 
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+# Lazy initialization - only create client when needed
+_client = None
+
+def get_client():
+    """Get or create the Gemini client."""
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            logger.warning("GEMINI_API_KEY not found in environment variables")
+            return None
+        try:
+            _client = genai.Client(api_key=api_key)
+        except Exception as e:
+            logger.error(f"Failed to create Gemini client: {e}")
+            return None
+    return _client
 
 
 class CodeDetectionResult(BaseModel):
@@ -19,6 +35,11 @@ class CodeDetectionResult(BaseModel):
 
 def detect_code_in_image(image_bytes: bytes, mime_type: str = "image/png") -> bool:
     try:
+        client = get_client()
+        if client is None:
+            logger.warning("Gemini client not available, accepting image as fallback")
+            return True
+        
         system_prompt = (
             "You are a programming code detection expert. "
             "Analyze the image and determine if it contains any programming code, "

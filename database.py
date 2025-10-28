@@ -57,6 +57,16 @@ class Database:
             )
         """)
         
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS streak_freezes (
+                user_id INTEGER,
+                guild_id INTEGER,
+                freeze_count INTEGER DEFAULT 1,
+                last_freeze_date TEXT,
+                PRIMARY KEY (user_id, guild_id)
+            )
+        """)
+        
         conn.commit()
         conn.close()
     
@@ -199,5 +209,109 @@ class Database:
             VALUES (?, ?, ?)
             ON CONFLICT(user_id, guild_id) DO UPDATE SET {setting} = excluded.{setting}
         """, (user_id, guild_id, value))
+        conn.commit()
+        conn.close()
+    
+    def get_streak_history(self, user_id: int, guild_id: int, limit: int = 30) -> List[Tuple]:
+        """Get streak history for a user."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT log_date, day_number
+            FROM daily_logs 
+            WHERE user_id = ? AND guild_id = ?
+            ORDER BY log_date DESC
+            LIMIT ?
+        """, (user_id, guild_id, limit))
+        results = cursor.fetchall()
+        conn.close()
+        return results
+    
+    def get_server_stats(self, guild_id: int) -> Tuple:
+        """Get server-wide statistics."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        
+        # Get total users with streaks
+        cursor.execute("""
+            SELECT COUNT(DISTINCT user_id) FROM streaks WHERE guild_id = ?
+        """, (guild_id,))
+        total_users = cursor.fetchone()[0] or 0
+        
+        # Get active today
+        cursor.execute("""
+            SELECT COUNT(DISTINCT user_id) FROM daily_logs 
+            WHERE guild_id = ? AND log_date = ?
+        """, (guild_id, today))
+        active_today = cursor.fetchone()[0] or 0
+        
+        # Get total days coded across all users
+        cursor.execute("""
+            SELECT SUM(current_streak) FROM streaks WHERE guild_id = ?
+        """, (guild_id,))
+        total_days = cursor.fetchone()[0] or 0
+        
+        # Get average streak
+        cursor.execute("""
+            SELECT AVG(current_streak) FROM streaks WHERE guild_id = ?
+        """, (guild_id,))
+        avg_streak = cursor.fetchone()[0] or 0
+        
+        conn.close()
+        return (total_users, active_today, total_days, round(avg_streak, 1) if avg_streak else 0)
+    
+    def get_streak_freeze(self, user_id: int, guild_id: int) -> int:
+        """Get user's freeze count (like Duolingo streak freeze)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT freeze_count FROM streak_freezes WHERE user_id = ? AND guild_id = ?
+        """, (user_id, guild_id))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else 1
+    
+    def use_streak_freeze(self, user_id: int, guild_id: int) -> bool:
+        """Use a streak freeze. Returns True if successful."""
+        freeze_count = self.get_streak_freeze(user_id, guild_id)
+        if freeze_count > 0:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+            cursor.execute("""
+                INSERT INTO streak_freezes (user_id, guild_id, freeze_count, last_freeze_date)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, guild_id) DO UPDATE SET
+                    freeze_count = freeze_count - 1,
+                    last_freeze_date = ?
+            """, (user_id, guild_id, freeze_count - 1, today, today))
+            conn.commit()
+            conn.close()
+            return True
+        return False
+    
+    def add_streak_freeze(self, user_id: int, guild_id: int, amount: int = 1):
+        """Add freezes to user's account."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # First check if exists
+        cursor.execute("""
+            SELECT freeze_count FROM streak_freezes WHERE user_id = ? AND guild_id = ?
+        """, (user_id, guild_id))
+        result = cursor.fetchone()
+        
+        if result:
+            new_count = result[0] + amount
+            cursor.execute("""
+                UPDATE streak_freezes SET freeze_count = ? WHERE user_id = ? AND guild_id = ?
+            """, (new_count, user_id, guild_id))
+        else:
+            cursor.execute("""
+                INSERT INTO streak_freezes (user_id, guild_id, freeze_count)
+                VALUES (?, ?, ?)
+            """, (user_id, guild_id, amount))
+        
         conn.commit()
         conn.close()
