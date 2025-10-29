@@ -49,7 +49,6 @@ class Utilities(commands.Cog):
             "giverole": "Moderation",
             "setreminder": "Server Configuration",
             "setreminderchannel": "Server Configuration",
-            "setchallengechannel": "Server Configuration",
             "setweeklychallenge": "Challenges",
             "setdailycodechannel": "Server Configuration",
             "sync_commands": "Server Configuration",
