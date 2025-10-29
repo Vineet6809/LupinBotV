@@ -43,19 +43,19 @@ def setup_dashboard_integration():
         if is_replit:
             def run_dash():
                 try:
-                    dashboard.run_dashboard(host='0.0.0.0', port=5000, debug=False)
+                    port = int(os.environ.get('PORT', '5000'))
+                    dashboard.run_dashboard(host='0.0.0.0', port=port, debug=False)
                 except Exception as e:
                     logger.error(f'Dashboard error: {e}')
             t = threading.Thread(target=run_dash, daemon=True)
             t.start()
-            logger.info('📊 Dashboard started in background on http://0.0.0.0:5000')
+            logger.info('📊 Dashboard started in background on http://0.0.0.0:%s', os.environ.get('PORT', '5000'))
     except Exception as e:
         logger.debug(f'Dashboard integration not available: {e}')
 
 async def backfill_guild_history(guild: discord.Guild):
     """On startup: populate users from daily-code history and process missed messages since last seen/processed."""
-    # Determine start point: last processed per channel or today start
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # Determine window
     last_seen_str = db.get_last_seen(guild.id)
     last_seen_dt = None
     if last_seen_str:
@@ -63,6 +63,8 @@ async def backfill_guild_history(guild: discord.Guild):
             last_seen_dt = datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S")
         except Exception:
             last_seen_dt = None
+    # Fallback window if no state: last 7 days
+    fallback_after = datetime.utcnow() - timedelta(days=7)
 
     streaks_cog = bot.get_cog('Streaks')
     if not streaks_cog:
@@ -76,15 +78,15 @@ async def backfill_guild_history(guild: discord.Guild):
             continue
         try:
             last_processed_id = db.get_last_processed(guild.id, channel.id)
-            # Build history iterator
             messages = []
             if last_processed_id:
                 after_obj = discord.Object(id=last_processed_id)
                 async for msg in channel.history(limit=None, after=after_obj, oldest_first=True):
                     messages.append(msg)
             else:
-                # No state: only process from today's start to keep logic simple and avoid heavy scans
-                async for msg in channel.history(limit=None, after=today_start, oldest_first=True):
+                # Use last_seen_dt if available; else fallback window
+                after_dt = last_seen_dt if last_seen_dt else fallback_after
+                async for msg in channel.history(limit=None, after=after_dt, oldest_first=True):
                     messages.append(msg)
 
             # Process messages oldest->newest
@@ -93,7 +95,7 @@ async def backfill_guild_history(guild: discord.Guild):
             last_id = last_processed_id
 
             for msg in messages:
-                # Track user info in DB
+                # Track user info in DB for dashboard
                 try:
                     db.upsert_user(
                         msg.author.id,
