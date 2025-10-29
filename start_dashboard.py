@@ -5,8 +5,10 @@ import os
 
 def start_dashboard():
     """Start the dashboard with proper configuration."""
+    port = int(os.environ.get('DASHBOARD_PORT', os.environ.get('PORT', '5000')))
+    
     print("🚀 Starting LupinBot Dashboard...")
-    print("📊 Dashboard will be available at: http://localhost:5000")
+    print(f"📊 Dashboard will be available at: http://localhost:{port}")
     print("⚠️  Make sure your Discord bot is running!")
     print("")
     
