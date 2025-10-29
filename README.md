@@ -158,6 +158,18 @@ See all commands with: `/help`
 - Verify bot has permissions to send messages in the reminder channel
 - See `REMINDER_FIX_SUMMARY.md` for detailed troubleshooting
 
+### Bot goes offline on Replit
+- **Issue**: Replit free tier puts inactive Repls to sleep
+- **Solution**: Setup external monitoring with UptimeRobot
+- **Steps**:
+  1. Your bot automatically runs a web server on Replit
+  2. Create free UptimeRobot account: https://uptimerobot.com
+  3. Add monitor to ping your Repl URL every 5 minutes
+  4. Monitor URL: `https://your-repl.username.repl.co/health`
+- **Verify**: Run `python verify_keepalive.py`
+- **Full Guide**: See `KEEPALIVE_SETUP.md`
+
+
 ## 📊 Technologies Used
 
 - **Discord.py** - Discord API wrapper
