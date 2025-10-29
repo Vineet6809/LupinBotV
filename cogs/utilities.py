@@ -378,6 +378,33 @@ class Utilities(commands.Cog):
             title="✅ Reminder Channel Set",
             description=f"Daily reminders will be posted in {channel.mention}",
             color=discord.Color.green())
+        
+        # Check if reminder time is also configured
+        settings = self.db.get_server_settings(interaction.guild_id)
+        if settings:
+            _, reminder_time_utc, _, _ = settings
+            if not reminder_time_utc:
+                embed.add_field(
+                    name="⚠️ Additional Setup Required",
+                    value="Don't forget to set the reminder time:\n`/setreminder time:\"HH:MM AM/PM\"`",
+                    inline=False
+                )
+                embed.color = discord.Color.orange()
+            else:
+                # Show the configured time in IST
+                try:
+                    ist = pytz.timezone('Asia/Kolkata')
+                    hour_utc, minute_utc = map(int, reminder_time_utc.split(':'))
+                    now_utc = datetime.utcnow().replace(hour=hour_utc, minute=minute_utc, second=0, microsecond=0, tzinfo=pytz.utc)
+                    now_ist = now_utc.astimezone(ist)
+                    time_ist_str = now_ist.strftime('%I:%M %p')
+                    embed.add_field(
+                        name="✅ Reminders Active",
+                        value=f"Reminders will be sent daily at **{time_ist_str} IST**",
+                        inline=False
+                    )
+                except:
+                    pass
 
         await interaction.response.send_message(embed=embed)
         logger.info(
