@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import re
 from datetime import datetime, timedelta
@@ -18,6 +18,10 @@ class Streaks(commands.Cog):
         self.db = Database()
         self.code_pattern = re.compile(r'```[\s\S]*?```|`[^`]+`')
         self.user_message_cache = {}  # Cache for messages
+        self.reminder_task.start()
+
+    def cog_unload(self):
+        self.reminder_task.cancel()
 
     def get_achievement_badge(self, streak: int) -> str:
         if streak >= 365:
@@ -56,6 +60,7 @@ class Streaks(commands.Cog):
             'binary', 'search', 'sort', 'recursion', 'dynamic'
         ]
         return any(keyword in content.lower() for keyword in code_keywords)
+        return False
 
     async def has_media_or_code(self, message) -> bool:
         """Enhanced detection for code content including files and images."""
@@ -261,7 +266,31 @@ class Streaks(commands.Cog):
         elif "daily-code" in message.channel.name and has_code:
              await self.process_streak_message(message, None)
 
+    @tasks.loop(minutes=1)
+    async def reminder_task(self):
+        """Checks every minute if it's time to send reminders."""
+        now_utc = datetime.utcnow()
+        today_str = now_utc.strftime("%Y-%m-%d")
+        current_time_str = now_utc.strftime("%H:%M")
 
+        guilds = self.db.get_all_reminder_guilds()
+        for guild_id, reminder_time, reminder_channel_id in guilds:
+            if current_time_str == reminder_time:
+                users_to_remind = self.db.get_users_to_remind(guild_id, today_str)
+                if users_to_remind:
+                    channel = self.bot.get_channel(reminder_channel_id)
+                    if channel:
+                        mentions = [f'<@{user_id}>' for user_id in users_to_remind]
+                        embed = discord.Embed(
+                            title="🔥 Daily Coding Reminder!",
+                            description=f"Time to continue your streak! Don't forget to post your progress today.",
+                            color=discord.Color.orange()
+                        )
+                        await channel.send(" ".join(mentions), embed=embed)
+
+    @reminder_task.before_loop
+    async def before_reminder_task(self):
+        await self.bot.wait_until_ready()
     
     @app_commands.command(name="leaderboard", description="Show the top coding streaks in this server")
     async def leaderboard(self, interaction: discord.Interaction):
@@ -295,49 +324,7 @@ class Streaks(commands.Cog):
         
         embed.set_footer(text="Keep coding to climb the leaderboard!")
         await interaction.response.send_message(embed=embed)
-
-    @app_commands.command(name="backfill_history", description="Rebuild a user's streak history (Admin only)")
-    @app_commands.describe(user="The user whose history to backfill")
-    async def backfill_history(self, interaction: discord.Interaction, user: discord.Member):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ You need administrator permissions to use this command.", ephemeral=True)
-            return
-
-        await interaction.response.defer()
-
-        user_id = user.id
-        guild_id = interaction.guild_id
-
-        streak_data = self.db.get_streak(user_id, guild_id)
-        if not streak_data or streak_data[0] == 0:
-            await interaction.followup.send(f"❌ {user.mention} does not have an active streak to backfill.", ephemeral=True)
-            return
-
-        current_streak, _, _, _ = streak_data
-        today = datetime.utcnow().date()
-
-        try:
-            # Clear existing logs
-            self.db.clear_user_logs(user_id, guild_id)
-
-            # Log the past N days
-            for i in range(current_streak):
-                log_date = today - timedelta(days=i)
-                day_number = current_streak - i
-                self.db.log_specific_day(user_id, guild_id, log_date.strftime("%Y-%m-%d"), day_number)
-
-            embed = discord.Embed(
-                title="✅ History Rebuilt",
-                description=f"Successfully rebuilt {user.mention}'s streak history for the last {current_streak} days.",
-                color=discord.Color.green()
-            )
-            await interaction.followup.send(embed=embed)
-            logger.info(f"Admin {interaction.user} rebuilt {user.name}'s streak history for {current_streak} days.")
-
-        except Exception as e:
-            logger.error(f"Error backfilling history for {user.name}: {e}")
-            await interaction.followup.send(f"❌ An error occurred while backfilling the history: {e}", ephemeral=True)
-
+    
     @app_commands.command(name="restore", description="Restore a user's streak (Admin only)")
     @app_commands.describe(user="The user whose streak to restore", day_number="The day number to restore to")
     async def restore(self, interaction: discord.Interaction, user: discord.Member, day_number: int):
@@ -405,58 +392,63 @@ class Streaks(commands.Cog):
             embed.add_field(name="📆 Last Log", value=last_log_date, inline=False)
         
         await interaction.response.send_message(embed=embed)
-    
+
     @app_commands.command(name="streaks_history", description="View your recent streak history (last 30 days)")
     async def streaks_history(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        
-        user_id = interaction.user.id
-        guild_id = interaction.guild_id
-        
-        history = self.db.get_streak_history(user_id, guild_id, limit=30)
-        
+        user = interaction.user
+        guild = interaction.guild
+        history = {}
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+
+        for channel in guild.text_channels:
+            try:
+                async for message in channel.history(limit=None, after=thirty_days_ago):
+                    if message.author == self.bot.user and message.embeds:
+                        for embed in message.embeds:
+                            if embed.title and (embed.title.startswith("🔥 Streak Updated!") or embed.title.startswith("🎉 Streak Started!")):
+                                if embed.description and user.mention in embed.description:
+                                    day_match = re.search(r"Day (\d+)", embed.footer.text)
+                                    if day_match:
+                                        day_number = int(day_match.group(1))
+                                        history[message.created_at.date()] = day_number
+            except discord.Forbidden:
+                continue
+
         if not history:
             await interaction.followup.send("You haven't logged any streaks yet! Post some code to begin!", ephemeral=True)
             return
-        
+
         weeks_data = {}
-        for log_date, day_number in history:
-            try:
-                date_obj = datetime.strptime(log_date, "%Y-%m-%d")
-                week_start = date_obj - timedelta(days=date_obj.weekday())
-                week_key = week_start.strftime("%Y-%m-%d")
-                
-                if week_key not in weeks_data:
-                    weeks_data[week_key] = []
-                weeks_data[week_key].append((log_date, day_number))
-            except (ValueError, AttributeError) as e:
-                logger.error(f'Error processing history date {log_date}: {e}')
-                continue
-        
+        for log_date, day_number in history.items():
+            week_start = log_date - timedelta(days=log_date.weekday())
+            week_key = week_start.strftime("%Y-%m-%d")
+            if week_key not in weeks_data:
+                weeks_data[week_key] = []
+            weeks_data[week_key].append((log_date.strftime("%Y-%m-%d"), day_number))
+
         embed = discord.Embed(
-            title=f"📅 {interaction.user.name}'s Streak History",
+            title=f"📅 {user.name}'s Streak History",
             description=f"Last 30 days of your coding journey",
             color=discord.Color.blue()
         )
-        embed.set_thumbnail(url=interaction.user.display_avatar.url)
-        
+        embed.set_thumbnail(url=user.display_avatar.url)
+
         for week_key in sorted(weeks_data.keys(), reverse=True)[:5]:
             week_data = weeks_data[week_key]
             week_start = datetime.strptime(week_key, "%Y-%m-%d")
             week_str = week_start.strftime("%b %d")
-            
             days_counted = len(week_data)
             max_day = max(day_num for _, day_num in week_data)
-            
             embed.add_field(
                 name=f"Week of {week_str}",
                 value=f"📆 {days_counted} days logged\n🔥 Up to Day {max_day}",
                 inline=False
             )
-        
+
         embed.set_footer(text=f"Total: {len(history)} days logged")
         await interaction.followup.send(embed=embed)
-        logger.info(f'{interaction.user} viewed streak history')
+        logger.info(f'{user} viewed streak history')
     
     @app_commands.command(name="streak_calendar", description="View your streak calendar (Duolingo-style)")
     async def streak_calendar(self, interaction: discord.Interaction):
@@ -509,7 +501,7 @@ class Streaks(commands.Cog):
         await interaction.followup.send(embed=embed)
         logger.info(f'{interaction.user} viewed streak calendar')
     
-    @app_codes.command(name="use_freeze", description="Use a streak freeze to protect your streak (like Duolingo)")
+    @app_commands.command(name="use_freeze", description="Use a streak freeze to protect your streak (like Duolingo)")
     async def use_freeze(self, interaction: discord.Interaction):
         freeze_count = self.db.get_streak_freeze(interaction.user.id, interaction.guild_id)
         

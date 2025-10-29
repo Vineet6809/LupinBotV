@@ -4,7 +4,8 @@ from discord import app_commands
 from database import Database
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
 
 logger = logging.getLogger('LupinBot.utilities')
 
@@ -298,8 +299,8 @@ class Utilities(commands.Cog):
 
     @app_commands.command(
         name="setreminder",
-        description="Set the daily reminder time (Admin only)")
-    @app_commands.describe(time="Time in HH:MM AM/PM format (e.g., 06:30 PM)")
+        description="Set the daily reminder time in IST (Admin only)")
+    @app_commands.describe(time="Time in HH:MM AM/PM format (e.g., 09:30 PM)")
     async def setreminder(self, interaction: discord.Interaction, time: str):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -310,24 +311,34 @@ class Utilities(commands.Cog):
         # Regex for HH:MM AM/PM format
         if not re.match(r'^(0[1-9]|1[0-2]):([0-5]\d) (AM|PM)$', time, re.IGNORECASE):
             await interaction.response.send_message(
-                "❌ Invalid time format. Please use HH:MM AM/PM (e.g., 06:30 PM).",
+                "❌ Invalid time format. Please use HH:MM AM/PM (e.g., 09:30 PM).",
                 ephemeral=True)
             return
 
         try:
-            # Convert to 24-hour format for storage
-            time_obj = datetime.strptime(time, '%I:%M %p')
-            time_24h = time_obj.strftime('%H:%M')
+            # Define IST timezone
+            ist = pytz.timezone('Asia/Kolkata')
+            
+            # Parse time input
+            time_obj = datetime.strptime(time, '%I:%M %p').time()
+            
+            # Get current time in IST and replace with user's time
+            now_ist = datetime.now(ist)
+            dt_ist = now_ist.replace(hour=time_obj.hour, minute=time_obj.minute, second=0, microsecond=0)
+            
+            # Convert to UTC
+            dt_utc = dt_ist.astimezone(pytz.utc)
+            time_24h_utc = dt_utc.strftime('%H:%M')
 
-            self.db.set_server_setting(interaction.guild_id, 'reminder_time', time_24h)
+            self.db.set_server_setting(interaction.guild_id, 'reminder_time', time_24h_utc)
 
             embed = discord.Embed(
                 title="⏰ Reminder Time Updated",
-                description=f"Daily streak reminder set to **{time}**",
+                description=f"Daily streak reminder set to **{time} IST**.",
                 color=discord.Color.green())
 
             await interaction.response.send_message(embed=embed)
-            logger.info(f'{interaction.user} set reminder time to {time}')
+            logger.info(f'{interaction.user} set reminder time to {time} IST ({time_24h_utc} UTC)')
         except ValueError:
             await interaction.response.send_message(
                 "❌ Invalid time input. Please check the format.",
@@ -360,7 +371,7 @@ class Utilities(commands.Cog):
     @app_commands.command(
         name="setreminderchannel",
         description="Set the channel for daily reminders (Admin only)")
-    @app_codes.describe(channel="The channel to post daily reminders")
+    @app_commands.describe(channel="The channel to post daily reminders")
     async def setreminderchannel(self, interaction: discord.Interaction,
                                  channel: discord.TextChannel):
         if not interaction.user.guild_permissions.administrator:

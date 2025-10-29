@@ -179,8 +179,6 @@ class Database:
     def set_server_setting(self, guild_id: int, setting: str, value):
         conn = self.get_connection()
         cursor = conn.cursor()
-        value = value - timedelta(hours=5, minutes=30) if isinstance(value, datetime) else value
-
         cursor.execute(f"""
             INSERT INTO server_settings (guild_id, {setting})
             VALUES (?, ?)
@@ -260,6 +258,33 @@ class Database:
         
         conn.close()
         return (total_users, active_today, total_days, round(avg_streak, 1) if avg_streak else 0)
+
+    def get_all_reminder_guilds(self) -> List[Tuple]:
+        """Gets all guilds that have a reminder time and channel set."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT guild_id, reminder_time, reminder_channel_id
+            FROM server_settings
+            WHERE reminder_time IS NOT NULL AND reminder_channel_id IS NOT NULL
+        """)
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def get_users_to_remind(self, guild_id: int, today_str: str) -> List[int]:
+        """Gets users in a guild who have an active streak but haven't logged today."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT s.user_id
+            FROM streaks s
+            LEFT JOIN daily_logs d ON s.user_id = d.user_id AND s.guild_id = d.guild_id AND d.log_date = ?
+            WHERE s.guild_id = ? AND s.current_streak > 0 AND d.log_date IS NULL
+        """, (today_str, guild_id))
+        results = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return results
     
     def get_streak_freeze(self, user_id: int, guild_id: int) -> int:
         """Get user's freeze count (like Duolingo streak freeze)."""
