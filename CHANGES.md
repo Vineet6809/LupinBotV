@@ -1,10 +1,13 @@
-# LupinBot – Changes Implemented (August 2025)
+# LupinBot – Changes Implemented (October 2025)
 
 This document summarizes all changes made to the repository, grouped by feature and file.
 
 ## Summary
-- Added IST-aware weekly challenges generated from last 7 days of daily-code activity using Gemini
+- **NEW**: AI Q&A Assistant - Ask Lupin questions by tagging with text, code files, or images
 - Fixed daily reminders to trigger reliably per IST for each guild
+- Added `/checkreminder` command to troubleshoot reminder configuration
+- Enhanced reminder setup commands with better warnings and feedback
+- Added IST-aware weekly challenges generated from last 7 days of daily-code activity using Gemini
 - Implemented startup backfill to prevent streak mismatches when the bot was offline
 - Added explicit daily-code channel configuration
 - Made the Flask dashboard Replit-ready and safe; added health endpoint
@@ -12,17 +15,51 @@ This document summarizes all changes made to the repository, grouped by feature 
 
 ---
 
+## Latest Features (October 29, 2025)
+
+### 1) AI Q&A Assistant 🤖
+- Tag @Lupin with any question to get AI-powered help
+- Supports text questions, code files (20+ languages), and images
+- Powered by Google Gemini AI (gemini-2.5-flash)
+- Examples:
+  - `@Lupin explain recursion`
+  - `@Lupin [attach code.py] review this code`
+  - `@Lupin [attach error.png] what's this error?`
+
+Files:
+- `gemini.py` - Added `answer_question()` function
+- `main.py` - Enhanced `on_message` handler to detect questions and process attachments
+- `AI_QA_FEATURE.md` - Complete documentation for the feature
+
+### 2) Reminder Troubleshooting
+- Added `/checkreminder` command to check reminder configuration
+- Enhanced `/setreminder` to warn if channel not configured
+- Enhanced `/setreminderchannel` to show complete setup status
+- Improved logging in reminder task for better debugging
+- Fixed issue where reminders wouldn't send if channel not configured
+
+Files:
+- `cogs/utilities.py` - Added `/checkreminder`, enhanced setup commands
+- `cogs/streaks.py` - Improved logging and error handling in reminder task
+- `README.md` - Added reminder troubleshooting section
+- `REMINDER_FIX_SUMMARY.md` - Complete guide for reminder issues
+- `check_reminders.py` - Test script to verify reminder configuration
+
+---
+
 ## New Admin Slash Commands
+- `/checkreminder` (new)
+  - Check current reminder configuration and troubleshoot issues
 - `/setweeklychallenge day:<dropdown> time_ist_12:<HH:MM AM/PM> channel:<optional>`
   - Configure weekly challenge day (IST) and time (12-hour format). Optional output channel.
 - `/setchallengechannel <#channel>`
   - Set (or override) output channel for weekly challenges.
 - `/setdailycodechannel <#channel>`
   - Explicitly set daily-code activity channel used for detection, weekly challenge generation, and backfill.
-- `/setreminder "HH:MM AM/PM"` (existing)
-  - Set daily reminder time in IST; stored as UTC internally.
-- `/setreminderchannel <#channel>` (existing)
-  - Set channel for daily reminders.
+- `/setreminder "HH:MM AM/PM"` (enhanced)
+  - Set daily reminder time in IST; stored as UTC internally. Now warns if channel not set.
+- `/setreminderchannel <#channel>` (enhanced)
+  - Set channel for daily reminders. Now shows complete status when both settings configured.
 - `/sync_commands` (existing)
   - Manually sync slash commands with Discord.
 
