@@ -131,7 +131,7 @@ class Challenges(commands.Cog):
     async def _post_weekly_challenge_if_due(self, guild: discord.Guild):
         ist_now = self._get_ist_now()
         target_weekday = self._guild_weekday_target(guild.id)  # Monday=0
-        time_ist = self._guild_challenge_time_ist(guild.id)  # 'HH:MM'
+        time_ist = self._guild_challenge_time_ist(guild.id)  # 'HH:MM' 24h stored
         try:
             hour, minute = map(int, time_ist.split(':'))
         except Exception:
@@ -191,22 +191,28 @@ class Challenges(commands.Cog):
     async def before_weekly(self):
         await self.bot.wait_until_ready()
 
-    @app_commands.command(name="setweeklychallenge", description="Admin: Configure weekly challenge day/time (IST) and output channel")
-    @app_commands.describe(day="Day of week", time_ist="Time in HH:MM (24h) IST", channel="Channel to post weekly challenge (optional)")
-    async def setweeklychallenge(self, interaction: discord.Interaction, day: str, time_ist: str, channel: Optional[discord.TextChannel] = None):
+    @app_commands.command(name="setweeklychallenge", description="Admin: Configure weekly challenge day/time (IST 12-hour format) and output channel")
+    @app_commands.describe(day="Day of week", time_ist_12="Time in HH:MM AM/PM (IST)", channel="Channel to post weekly challenge (optional)")
+    @app_commands.choices(day=[app_commands.Choice(name=d, value=d) for d in DAYS])
+    async def setweeklychallenge(self, interaction: discord.Interaction, day: app_commands.Choice[str], time_ist_12: str, channel: Optional[discord.TextChannel] = None):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ You need administrator permissions to use this command.", ephemeral=True)
             return
-        day_norm = day.strip().capitalize()
-        if day_norm not in DAYS:
-            await interaction.response.send_message("❌ Invalid day. Choose one of: " + ", ".join(DAYS), ephemeral=True)
+        day_norm = day.value
+        # Validate 12h time with AM/PM
+        if not re.match(r'^(0[1-9]|1[0-2]):([0-5]\d) (AM|PM)$', time_ist_12, re.IGNORECASE):
+            await interaction.response.send_message("❌ Invalid time. Use 12h HH:MM AM/PM format (IST)", ephemeral=True)
             return
-        if not re.match(r'^([01]?\d|2[0-3]):([0-5]\d)$', time_ist):
-            await interaction.response.send_message("❌ Invalid time. Use 24h HH:MM format (IST)", ephemeral=True)
+        try:
+            # Parse to 24h HH:MM for storage
+            t_obj = datetime.strptime(time_ist_12.upper(), '%I:%M %p').time()
+            time_ist_24 = f"{t_obj.hour:02d}:{t_obj.minute:02d}"
+        except Exception:
+            await interaction.response.send_message("❌ Could not parse time. Use 12h HH:MM AM/PM format (IST)", ephemeral=True)
             return
         channel_id = channel.id if channel else None
-        self._set_challenge_settings(interaction.guild_id, weekday=day_norm, time_ist=time_ist, channel_id=channel_id)
-        msg = f"Weekly challenge scheduled: **{day_norm} {time_ist} IST**"
+        self._set_challenge_settings(interaction.guild_id, weekday=day_norm, time_ist=time_ist_24, channel_id=channel_id)
+        msg = f"Weekly challenge scheduled: **{day_norm} {time_ist_12.upper()} IST**"
         if channel:
             msg += f" in {channel.mention}"
         await interaction.response.send_message(msg)
