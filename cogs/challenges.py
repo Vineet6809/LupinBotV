@@ -4,7 +4,7 @@ from discord import app_commands
 from database import Database
 import logging
 import random
-from datetime import datetime, date
+from datetime import datetime, timezone
 
 logger = logging.getLogger('LupinBot.challenges')
 
@@ -12,11 +12,8 @@ class Challenges(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = Database()
-        # Track sends to avoid duplicates
-        self._reminder_sent = {}  # guild_id -> YYYY-MM-DD
-        self._weekly_sent = set()  # (guild_id, ISOYEAR, ISOWEEK)
-        self.daily_reminder.start()
-        self.weekly_summary.start()
+        self._weekly_sent_mem = set()  # (guild_id, yearweek)
+        self.weekly_challenge.start()
         
         self.challenge_pool = [
             "Build a simple calculator in your favorite language",
@@ -42,102 +39,60 @@ class Challenges(commands.Cog):
         ]
     
     def cog_unload(self):
-        self.daily_reminder.cancel()
-        self.weekly_summary.cancel()
-    
-    @tasks.loop(minutes=1)
-    async def daily_reminder(self):
-        try:
-            now = datetime.utcnow()
-            today_str = now.strftime('%Y-%m-%d')
-            
-            for guild in self.bot.guilds:
-                settings = self.db.get_server_settings(guild.id)
-                
-                if settings:
-                    _, reminder_time, _, reminder_channel_id = settings
-                    if not reminder_time:
-                        continue
-                    
-                    if now.strftime('%H:%M') == reminder_time:
-                        last_sent = self._reminder_sent.get(guild.id)
-                        if last_sent == today_str:
-                            continue  # Already sent today
-                        
-                        if reminder_channel_id:
-                            channel = guild.get_channel(reminder_channel_id)
-                            if channel:
-                                embed = discord.Embed(
-                                    title="⏰ Daily Coding Reminder",
-                                    description="Don't forget to log your coding progress today!",
-                                    color=discord.Color.blue()
-                                )
-                                embed.add_field(
-                                    name="How to log your streak",
-                                    value="Post a message with `#DAY-n` (where n is your day number) to track your streak!",
-                                    inline=False
-                                )
-                                embed.set_footer(text="Keep coding, keep growing! 🚀")
-                                
-                                await channel.send(embed=embed)
-                                self._reminder_sent[guild.id] = today_str
-                                logger.info(f'Sent daily reminder to {guild.name}')
-        except Exception as e:
-            logger.error(f'Error in daily reminder: {e}')
-    
-    @daily_reminder.before_loop
-    async def before_daily_reminder(self):
-        await self.bot.wait_until_ready()
+        self.weekly_challenge.cancel()
     
     @tasks.loop(minutes=5)
-    async def weekly_summary(self):
-        try:
-            now = datetime.utcnow()
-            isoyear, isoweek, _ = now.isocalendar()
-            week_key = (isoyear, isoweek)
-            
-            if now.weekday() == 6:  # Sunday
-                for guild in self.bot.guilds:
-                    if (guild.id, *week_key) in self._weekly_sent:
-                        continue
-                    
-                    leaderboard_data = self.db.get_leaderboard(guild.id, 3)
-                    if leaderboard_data:
-                        settings = self.db.get_server_settings(guild.id)
-                        if settings:
-                            _, _, _, reminder_channel_id = settings
-                            if reminder_channel_id:
-                                channel = guild.get_channel(reminder_channel_id)
-                                if channel:
-                                    embed = discord.Embed(
-                                        title="🏆 Weekly Streak Summary",
-                                        description=f"Top 3 coders in {guild.name} this week!",
-                                        color=discord.Color.gold()
-                                    )
-                                    
-                                    medals = ["🥇", "🥈", "🥉"]
-                                    
-                                    for idx, (user_id, current_streak, longest_streak, _) in enumerate(leaderboard_data):
-                                        try:
-                                            user = await self.bot.fetch_user(user_id)
-                                            embed.add_field(
-                                                name=f"{medals[idx]} {user.name}",
-                                                value=f"Current: {current_streak} days | Best: {longest_streak} days",
-                                                inline=False
-                                            )
-                                        except Exception:
-                                            continue
-                                    
-                                    embed.set_footer(text="Keep up the great work! 💪")
-                                    
-                                    await channel.send(embed=embed)
-                                    self._weekly_sent.add((guild.id, *week_key))
-                                    logger.info(f'Sent weekly summary to {guild.name}')
-        except Exception as e:
-            logger.error(f'Error in weekly summary: {e}')
+    async def weekly_challenge(self):
+        """Post a weekly challenge every Monday 09:00 UTC to the configured challenge channel."""
+        now = datetime.utcnow()
+        # Monday == 0
+        if now.weekday() != 0:
+            return
+        if not (now.hour == 9 and 0 <= now.minute < 5):
+            return
+        
+        isoyear, isoweek, _ = now.isocalendar()
+        week_key = f"{isoyear}-W{isoweek:02d}"
+        
+        for guild in self.bot.guilds:
+            try:
+                # Avoid duplicate within process
+                if (guild.id, week_key) in self._weekly_sent_mem:
+                    continue
+                
+                # Avoid duplicate across restarts using DB meta
+                last_week = self.db.get_last_week_sent(guild.id)
+                if last_week == week_key:
+                    continue
+                
+                settings = self.db.get_server_settings(guild.id)
+                if not settings:
+                    continue
+                _, _, challenge_channel_id, _ = settings
+                if not challenge_channel_id:
+                    continue
+                channel = guild.get_channel(challenge_channel_id)
+                if not channel:
+                    continue
+                
+                challenge = random.choice(self.challenge_pool)
+                embed = discord.Embed(
+                    title="💻 Weekly Coding Challenge",
+                    description=challenge,
+                    color=discord.Color.purple()
+                )
+                embed.set_footer(text="Share your solution and help others! 🚀")
+                await channel.send(embed=embed)
+                
+                # Mark sent
+                self._weekly_sent_mem.add((guild.id, week_key))
+                self.db.set_last_week_sent(guild.id, week_key)
+                logger.info(f'Sent weekly challenge to {guild.name}')
+            except Exception as e:
+                logger.error(f'Error sending weekly challenge in guild {guild.id}: {e}')
     
-    @weekly_summary.before_loop
-    async def before_weekly_summary(self):
+    @weekly_challenge.before_loop
+    async def before_weekly_challenge(self):
         await self.bot.wait_until_ready()
     
     @app_commands.command(name="challenge", description="Get a random coding challenge")
@@ -145,7 +100,7 @@ class Challenges(commands.Cog):
         challenge = random.choice(self.challenge_pool)
         
         embed = discord.Embed(
-            title="💻 Daily Coding Challenge",
+            title="💻 Coding Challenge",
             description=challenge,
             color=discord.Color.purple()
         )

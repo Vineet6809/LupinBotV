@@ -14,6 +14,10 @@ def index():
     """Main dashboard page."""
     return render_template('dashboard.html')
 
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok"})
+
 @app.route('/api/server_stats/<int:guild_id>')
 def server_stats(guild_id):
     """Get server statistics."""
@@ -45,7 +49,7 @@ def leaderboard_api(guild_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Ensure users table exists
+        # Ensure users table exists (also created in database.init_db)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,

@@ -67,6 +67,35 @@ class Database:
             )
         """)
         
+        # Users table for dashboard/user info caching
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                display_name TEXT,
+                avatar_url TEXT,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Bot meta/state tracking
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bot_meta (
+                guild_id INTEGER PRIMARY KEY,
+                last_seen_at TEXT,
+                last_week_sent TEXT
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bot_channel_state (
+                guild_id INTEGER,
+                channel_id INTEGER,
+                last_processed_id INTEGER,
+                PRIMARY KEY (guild_id, channel_id)
+            )
+        """)
+        
         conn.commit()
         conn.close()
     
@@ -97,6 +126,23 @@ class Database:
                 last_day_number = excluded.last_day_number
         """, (user_id, guild_id, current_streak, longest_streak, today, last_day_number))
         
+        conn.commit()
+        conn.close()
+    
+    def update_streak_with_date(self, user_id: int, guild_id: int, current_streak: int,
+                                longest_streak: int, last_day_number: int, last_date_str: str):
+        """Update streak while explicitly setting last_log_date to provided date (YYYY-MM-DD)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO streaks (user_id, guild_id, current_streak, longest_streak, last_log_date, last_day_number)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, guild_id) DO UPDATE SET
+                current_streak = excluded.current_streak,
+                longest_streak = excluded.longest_streak,
+                last_log_date = excluded.last_log_date,
+                last_day_number = excluded.last_day_number
+        """, (user_id, guild_id, current_streak, longest_streak, last_date_str, last_day_number))
         conn.commit()
         conn.close()
     
@@ -162,6 +208,17 @@ class Database:
             INSERT OR REPLACE INTO daily_logs (user_id, guild_id, log_date, day_number)
             VALUES (?, ?, ?, ?)
         """, (user_id, guild_id, today, day_number))
+        conn.commit()
+        conn.close()
+    
+    def log_specific_day(self, user_id: int, guild_id: int, date: str, day_number: int):
+        """Log a specific day in the past for a user."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO daily_logs (user_id, guild_id, log_date, day_number)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, guild_id, date, day_number))
         conn.commit()
         conn.close()
     
@@ -352,13 +409,89 @@ class Database:
         conn.commit()
         conn.close()
 
-    def log_specific_day(self, user_id: int, guild_id: int, date: str, day_number: int):
-        """Log a specific day in the past for a user."""
+    # Users table helpers
+    def upsert_user(self, user_id: int, username: Optional[str], display_name: Optional[str], avatar_url: Optional[str]):
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR REPLACE INTO daily_logs (user_id, guild_id, log_date, day_number)
-            VALUES (?, ?, ?, ?)
-        ''', (user_id, guild_id, date, day_number))
+        cursor.execute(
+            """
+            INSERT INTO users (user_id, username, display_name, avatar_url, last_updated)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id) DO UPDATE SET
+                username = excluded.username,
+                display_name = excluded.display_name,
+                avatar_url = excluded.avatar_url,
+                last_updated = CURRENT_TIMESTAMP
+            """,
+            (user_id, username, display_name, avatar_url)
+        )
+        conn.commit()
+        conn.close()
+
+    # Bot meta helpers
+    def get_last_seen(self, guild_id: int) -> Optional[str]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT last_seen_at FROM bot_meta WHERE guild_id = ?", (guild_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else None
+
+    def set_last_seen(self, guild_id: int, dt_str: str):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO bot_meta (guild_id, last_seen_at)
+            VALUES (?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET last_seen_at = excluded.last_seen_at
+            """,
+            (guild_id, dt_str)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_last_week_sent(self, guild_id: int) -> Optional[str]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT last_week_sent FROM bot_meta WHERE guild_id = ?", (guild_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else None
+
+    def set_last_week_sent(self, guild_id: int, week_key: str):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO bot_meta (guild_id, last_week_sent)
+            VALUES (?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET last_week_sent = excluded.last_week_sent
+            """,
+            (guild_id, week_key)
+        )
+        conn.commit()
+        conn.close()
+
+    # Channel state helpers
+    def get_last_processed(self, guild_id: int, channel_id: int) -> Optional[int]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT last_processed_id FROM bot_channel_state WHERE guild_id = ? AND channel_id = ?", (guild_id, channel_id))
+        row = cursor.fetchone()
+        conn.close()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def set_last_processed(self, guild_id: int, channel_id: int, last_processed_id: int):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO bot_channel_state (guild_id, channel_id, last_processed_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT(guild_id, channel_id) DO UPDATE SET last_processed_id = excluded.last_processed_id
+            """,
+            (guild_id, channel_id, last_processed_id)
+        )
         conn.commit()
         conn.close()
