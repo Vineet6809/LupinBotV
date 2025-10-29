@@ -347,31 +347,6 @@ class Utilities(commands.Cog):
                 ephemeral=True)
 
     @app_commands.command(
-        name="setchallengechannel",
-        description="Set the channel for weekly challenges (Admin only)")
-    @app_commands.describe(channel="The channel to post weekly challenges")
-    async def setchallengechannel(self, interaction: discord.Interaction,
-                                  channel: discord.TextChannel):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ You need administrator permissions to use this command.",
-                ephemeral=True)
-            return
-
-        # Reuse server_settings for backward compatibility
-        self.db.set_server_setting(interaction.guild_id,
-                                   'challenge_channel_id', channel.id)
-
-        embed = discord.Embed(
-            title="✅ Challenge Channel Set",
-            description=f"Weekly challenges will be posted in {channel.mention}",
-            color=discord.Color.green())
-
-        await interaction.response.send_message(embed=embed)
-        logger.info(
-            f'{interaction.user} set challenge channel to {channel.name}')
-
-    @app_commands.command(
         name="setreminderchannel",
         description="Set the channel for daily reminders (Admin only)")
     @app_commands.describe(channel="The channel to post daily reminders")
