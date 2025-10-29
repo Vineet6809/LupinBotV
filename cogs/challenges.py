@@ -4,7 +4,7 @@ from discord import app_commands
 from database import Database
 import logging
 import random
-from datetime import datetime
+from datetime import datetime, date
 
 logger = logging.getLogger('LupinBot.challenges')
 
@@ -12,6 +12,9 @@ class Challenges(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = Database()
+        # Track sends to avoid duplicates
+        self._reminder_sent = {}  # guild_id -> YYYY-MM-DD
+        self._weekly_sent = set()  # (guild_id, ISOYEAR, ISOWEEK)
         self.daily_reminder.start()
         self.weekly_summary.start()
         
@@ -42,20 +45,25 @@ class Challenges(commands.Cog):
         self.daily_reminder.cancel()
         self.weekly_summary.cancel()
     
-    @tasks.loop(hours=24)
+    @tasks.loop(minutes=1)
     async def daily_reminder(self):
         try:
             now = datetime.utcnow()
+            today_str = now.strftime('%Y-%m-%d')
             
             for guild in self.bot.guilds:
                 settings = self.db.get_server_settings(guild.id)
                 
                 if settings:
                     _, reminder_time, _, reminder_channel_id = settings
+                    if not reminder_time:
+                        continue
                     
-                    hour, minute = map(int, reminder_time.split(':'))
-                    
-                    if now.hour == hour and now.minute <= minute < now.minute + 5:
+                    if now.strftime('%H:%M') == reminder_time:
+                        last_sent = self._reminder_sent.get(guild.id)
+                        if last_sent == today_str:
+                            continue  # Already sent today
+                        
                         if reminder_channel_id:
                             channel = guild.get_channel(reminder_channel_id)
                             if channel:
@@ -72,6 +80,7 @@ class Challenges(commands.Cog):
                                 embed.set_footer(text="Keep coding, keep growing! 🚀")
                                 
                                 await channel.send(embed=embed)
+                                self._reminder_sent[guild.id] = today_str
                                 logger.info(f'Sent daily reminder to {guild.name}')
         except Exception as e:
             logger.error(f'Error in daily reminder: {e}')
@@ -80,21 +89,23 @@ class Challenges(commands.Cog):
     async def before_daily_reminder(self):
         await self.bot.wait_until_ready()
     
-    @tasks.loop(hours=168)
+    @tasks.loop(minutes=5)
     async def weekly_summary(self):
         try:
             now = datetime.utcnow()
+            isoyear, isoweek, _ = now.isocalendar()
+            week_key = (isoyear, isoweek)
             
-            if now.weekday() == 6:
+            if now.weekday() == 6:  # Sunday
                 for guild in self.bot.guilds:
-                    leaderboard_data = self.db.get_leaderboard(guild.id, 3)
+                    if (guild.id, *week_key) in self._weekly_sent:
+                        continue
                     
+                    leaderboard_data = self.db.get_leaderboard(guild.id, 3)
                     if leaderboard_data:
                         settings = self.db.get_server_settings(guild.id)
-                        
                         if settings:
                             _, _, _, reminder_channel_id = settings
-                            
                             if reminder_channel_id:
                                 channel = guild.get_channel(reminder_channel_id)
                                 if channel:
@@ -114,12 +125,13 @@ class Challenges(commands.Cog):
                                                 value=f"Current: {current_streak} days | Best: {longest_streak} days",
                                                 inline=False
                                             )
-                                        except:
+                                        except Exception:
                                             continue
                                     
                                     embed.set_footer(text="Keep up the great work! 💪")
                                     
                                     await channel.send(embed=embed)
+                                    self._weekly_sent.add((guild.id, *week_key))
                                     logger.info(f'Sent weekly summary to {guild.name}')
         except Exception as e:
             logger.error(f'Error in weekly summary: {e}')

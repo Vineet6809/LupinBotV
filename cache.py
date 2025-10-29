@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 logger = logging.getLogger('LupinBot.cache')
 
@@ -16,7 +16,8 @@ class CacheManager:
         Args:
             default_ttl: Default time-to-live in seconds (5 minutes by default)
         """
-        self.cache = {}
+        # key -> (value, timestamp, ttl_override)
+        self.cache: dict[str, Tuple[Any, datetime, Optional[int]]] = {}
         self.default_ttl = default_ttl
         self.lock = asyncio.Lock()
     
@@ -34,10 +35,11 @@ class CacheManager:
             if key not in self.cache:
                 return None
             
-            value, timestamp = self.cache[key]
+            value, timestamp, ttl_override = self.cache[key]
             age = datetime.now() - timestamp
+            ttl_to_use = ttl_override if ttl_override is not None else self.default_ttl
             
-            if age.total_seconds() > self.default_ttl:
+            if age.total_seconds() > ttl_to_use:
                 # Cache expired
                 del self.cache[key]
                 return None
@@ -54,7 +56,7 @@ class CacheManager:
             ttl: Optional custom time-to-live in seconds
         """
         async with self.lock:
-            self.cache[key] = (value, datetime.now())
+            self.cache[key] = (value, datetime.now(), ttl)
     
     async def clear(self):
         """Clear all cached values."""

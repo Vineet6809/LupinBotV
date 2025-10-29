@@ -60,7 +60,6 @@ class Streaks(commands.Cog):
             'binary', 'search', 'sort', 'recursion', 'dynamic'
         ]
         return any(keyword in content.lower() for keyword in code_keywords)
-        return False
 
     async def has_media_or_code(self, message) -> bool:
         """Enhanced detection for code content including files and images."""
@@ -539,13 +538,20 @@ class Streaks(commands.Cog):
                 return
         
         if self.db.use_streak_freeze(user_id, guild_id):
+            # Recalculate values for response
+            remaining = max(freeze_count - 1, 0)
+            current_streak_val = 0
+            streak_data_after = self.db.get_streak(user_id, guild_id)
+            if streak_data_after:
+                current_streak_val = streak_data_after[0] or 0
+            
             embed = discord.Embed(
                 title="❄️ Streak Freeze Used!",
                 description="Your streak has been protected for one day.",
                 color=discord.Color.cyan()
             )
-            embed.add_field(name="Freezes Remaining", value=str(freeze_count - 1), inline=True)
-            embed.add_field(name="Current Streak", value=f"{current_streak} days", inline=True)
+            embed.add_field(name="Freezes Remaining", value=str(remaining), inline=True)
+            embed.add_field(name="Current Streak", value=f"{current_streak_val} days", inline=True)
             embed.set_footer(text="Remember to code tomorrow to keep your streak going!")
             await interaction.response.send_message(embed=embed)
             logger.info(f'{interaction.user} used a streak freeze')

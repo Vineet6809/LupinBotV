@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import logging
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger('LupinBot.moderation')
 
@@ -77,8 +78,8 @@ class Moderation(commands.Cog):
             return
         
         try:
-            import datetime
-            timeout_duration = datetime.timedelta(minutes=duration)
+            import datetime as _dt
+            timeout_duration = _dt.timedelta(minutes=duration)
             await member.timeout(timeout_duration, reason=reason)
             
             embed = discord.Embed(
@@ -123,7 +124,7 @@ class Moderation(commands.Cog):
             logger.error(f'Error giving role: {e}')
             await interaction.response.send_message(f"❌ Failed to give role to {member.mention}.", ephemeral=True)
     
-    @app_commands.command(name="clear", description="Clear all messages in the channel (Admin only)")
+    @app_commands.command(name="clear", description="Clear recent messages in the channel (Admin only)")
     async def clear(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.manage_messages:
             await interaction.response.send_message("❌ You don't have permission to manage messages.", ephemeral=True)
@@ -134,7 +135,8 @@ class Moderation(commands.Cog):
         try:
             channel = interaction.channel
             deleted_count = 0
-            
+            fourteen_days_ago = datetime.now(timezone.utc) - timedelta(days=14)
+
             while True:
                 messages = []
                 async for message in channel.history(limit=100):
@@ -143,13 +145,29 @@ class Moderation(commands.Cog):
                 if not messages:
                     break
                 
-                if len(messages) == 1:
-                    await messages[0].delete()
+                # Filter messages newer than 14 days for bulk delete
+                recent_msgs = [m for m in messages if m.created_at > fourteen_days_ago]
+                old_msgs = [m for m in messages if m.created_at <= fourteen_days_ago]
+
+                if len(recent_msgs) > 1:
+                    await channel.delete_messages(recent_msgs)
+                    deleted_count += len(recent_msgs)
+                elif len(recent_msgs) == 1:
+                    await recent_msgs[0].delete()
                     deleted_count += 1
+
+                # Delete old messages individually to avoid bulk delete restriction
+                for m in old_msgs:
+                    try:
+                        await m.delete()
+                        deleted_count += 1
+                    except Exception:
+                        # Stop if we hit rate limits or permissions
+                        pass
+                
+                # If less than 100 were found, we've likely reached the start
+                if len(messages) < 100:
                     break
-                else:
-                    await channel.delete_messages(messages)
-                    deleted_count += len(messages)
             
             embed = discord.Embed(
                 title="🧹 Channel Cleared",

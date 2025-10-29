@@ -37,51 +37,15 @@ def server_stats(guild_id):
 
 @app.route('/api/leaderboard/<int:guild_id>')
 def leaderboard_api(guild_id):
-    """Get leaderboard data with Discord user information from daily-code channel."""
+    """Get leaderboard data using database-backed user info only (no Discord API calls here)."""
     try:
         leaderboard = db.get_leaderboard(guild_id, limit=10)
-        
         data = []
-        # Cache for user lookups to avoid repeated API calls
-        user_cache = {}
         
-        # Try to get user info from daily-code channel if bot is available
-        if bot and hasattr(bot, 'is_ready') and bot.is_ready():
-            try:
-                # Find the daily-code channel
-                for guild in bot.guilds:
-                    if guild.id == guild_id:
-                        # Look for channel named 'daily-code' or similar
-                        for channel in guild.text_channels:
-                            if 'daily-code' in channel.name.lower() or 'code' in channel.name.lower():
-                                logger.info(f'Found daily-code channel: {channel.name}')
-                                # Get recent members who posted in this channel
-                                try:
-                                    import asyncio
-                                    loop = asyncio.new_event_loop()
-                                    asyncio.set_event_loop(loop)
-                                    # Fetch channel history for user info
-                                    async def get_users():
-                                        async for message in channel.history(limit=100):
-                                            if message.author and message.author.id not in user_cache:
-                                                user_cache[message.author.id] = {
-                                                    'username': message.author.name,
-                                                    'display_name': message.author.display_name or message.author.name,
-                                                    'avatar': str(message.author.display_avatar.url) if message.author.display_avatar else None
-                                                }
-                                    loop.run_until_complete(get_users())
-                                    loop.close()
-                                except Exception as e:
-                                    logger.debug(f"Could not fetch channel history: {e}")
-                                break
-            except Exception as e:
-                logger.debug(f"Error accessing guild: {e}")
-        
-        # Get user info from database
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Create users table if it doesn't exist
+        # Ensure users table exists
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -92,63 +56,31 @@ def leaderboard_api(guild_id):
             )
         """)
         
-        # Build leaderboard data
         for user_id, current_streak, longest_streak, last_log_date in leaderboard:
             user_id_int = int(user_id)
             user_info = {
-                'user_id': str(user_id),
+                'user_id': str(user_id_int),
                 'current_streak': current_streak,
                 'longest_streak': longest_streak,
                 'last_log_date': last_log_date,
-                'username': f'User {user_id}',
-                'display_name': f'User {user_id}',
+                'username': f'User {user_id_int}',
+                'display_name': f'User {user_id_int}',
                 'avatar': None
             }
             
-            # Try to get user info from database first
             cursor.execute("SELECT username, display_name, avatar_url FROM users WHERE user_id = ?", (user_id_int,))
             user_row = cursor.fetchone()
-            
             if user_row:
                 username, display_name, avatar_url = user_row
-                user_info['username'] = username or f'User {user_id}'
-                user_info['display_name'] = display_name or username or f'User {user_id}'
+                user_info['username'] = username or user_info['username']
+                user_info['display_name'] = display_name or user_info['display_name']
                 user_info['avatar'] = avatar_url
-                logger.info(f"Found user {user_id} in database: {username}")
-            else:
-                # Use cached user info if available
-                if user_id_int in user_cache:
-                    cached = user_cache[user_id_int]
-                    user_info['username'] = cached['username']
-                    user_info['display_name'] = cached['display_name']
-                    user_info['avatar'] = cached['avatar']
-                elif bot and hasattr(bot, 'is_ready') and bot.is_ready():
-                    # Try direct user lookup
-                    try:
-                        logger.info(f"Bot is ready, fetching user {user_id}")
-                        import asyncio
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        user = loop.run_until_complete(bot.fetch_user(user_id_int))
-                        if user:
-                            user_info['username'] = user.name
-                            user_info['display_name'] = user.display_name or user.name
-                            user_info['avatar'] = str(user.display_avatar.url) if user.display_avatar else None
-                            logger.info(f"Fetched user {user_id}: {user.name}")
-                        loop.close()
-                    except Exception as e:
-                        logger.error(f"Could not fetch user {user_id}: {e}")
-                else:
-                    logger.info(f"Bot not ready or not available. Bot: {bot}, Ready: {bot.is_ready() if bot else 'No bot'}")
             
             data.append(user_info)
         
         conn.close()
         
-        return jsonify({
-            'success': True,
-            'data': data
-        })
+        return jsonify({'success': True, 'data': data})
     except Exception as e:
         logger.error(f'Error getting leaderboard: {e}')
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -186,14 +118,12 @@ def user_stats(user_id, guild_id):
 def recent_activity(guild_id):
     """Get recent activity."""
     try:
-        # Get current time
         now = datetime.utcnow()
         today = now.strftime("%Y-%m-%d")
         
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Get today's activity
         cursor.execute("""
             SELECT user_id, day_number
             FROM daily_logs
@@ -204,17 +134,11 @@ def recent_activity(guild_id):
         
         activity = []
         for user_id, day_number in cursor.fetchall():
-            activity.append({
-                'user_id': str(user_id),
-                'day_number': day_number
-            })
+            activity.append({'user_id': str(user_id), 'day_number': day_number})
         
         conn.close()
         
-        return jsonify({
-            'success': True,
-            'data': activity
-        })
+        return jsonify({'success': True, 'data': activity})
     except Exception as e:
         logger.error(f'Error getting recent activity: {e}')
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -226,7 +150,6 @@ def connected_guilds():
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Get all unique guild IDs from streaks table
         cursor.execute("""
             SELECT DISTINCT guild_id
             FROM streaks
@@ -235,25 +158,18 @@ def connected_guilds():
         
         guilds = []
         for row in cursor.fetchall():
-            # Convert guild_id to string to avoid JavaScript number precision loss
             guild_id_str = str(row[0])
-            guilds.append({
-                'guild_id': guild_id_str,
-                'name': f'Guild {guild_id_str}'
-            })
+            guilds.append({'guild_id': guild_id_str, 'name': f'Guild {guild_id_str}'})
         
         conn.close()
         
-        return jsonify({
-            'success': True,
-            'data': guilds
-        })
+        return jsonify({'success': True, 'data': guilds})
     except Exception as e:
         logger.error(f'Error getting connected guilds: {e}')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def set_bot_instance(bot_instance):
-    """Set the Discord bot instance for fetching user data."""
+    """Set the Discord bot instance for fetching user data (not used in Flask endpoints)."""
     global bot
     bot = bot_instance
     logger.info('Bot instance set for dashboard')
@@ -268,4 +184,3 @@ if __name__ == '__main__':
     import sys
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
     run_dashboard(port=port, debug=True)
-
