@@ -122,3 +122,79 @@ def generate_challenge_from_history(history_samples: list[str], guild_name: str,
         return (
             "Create a small app inspired by your recent work: ingest data, perform meaningful transformations, and expose a simple interface."
         )
+
+
+async def answer_question(question: str, attachments: list = None, image_data: list = None) -> str:
+    """
+    Answer a user's question using Gemini AI.
+    Supports text questions, code files, and images.
+    
+    Args:
+        question: The user's question text
+        attachments: List of attachment data (filename, content, mime_type)
+        image_data: List of image data (bytes, mime_type)
+    
+    Returns:
+        AI-generated answer as string
+    """
+    try:
+        client = get_client()
+        if client is None:
+            return "❌ I'm sorry, but I can't access my AI capabilities right now. Please make sure the GEMINI_API_KEY is configured."
+        
+        system_instruction = (
+            "You are Lupin, a friendly and knowledgeable AI assistant specializing in programming and coding. "
+            "You help developers by answering questions, explaining code, debugging issues, and providing guidance. "
+            "Be concise, clear, and helpful. Use code blocks when showing code examples. "
+            "If analyzing images or files, describe what you see and provide relevant insights. "
+            "Keep responses under 1500 characters when possible."
+        )
+        
+        # Build the content list for Gemini
+        content_parts = []
+        
+        # Add text files/code files first
+        if attachments:
+            for att in attachments:
+                filename = att.get('filename', 'file')
+                content = att.get('content', '')
+                content_parts.append(f"📎 **Attached file: {filename}**\n```\n{content[:3000]}\n```")
+        
+        # Add images
+        if image_data:
+            for img in image_data:
+                content_parts.append(
+                    types.Part.from_bytes(
+                        data=img['data'],
+                        mime_type=img['mime_type']
+                    )
+                )
+        
+        # Add the user's question
+        content_parts.append(question)
+        
+        # Generate response
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=content_parts,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.7,
+                max_output_tokens=2000,
+            ),
+        )
+        
+        answer = (response.text or "").strip()
+        
+        if not answer:
+            return "❌ I couldn't generate a response. Please try rephrasing your question."
+        
+        # Trim if too long for Discord (2000 char limit)
+        if len(answer) > 1900:
+            answer = answer[:1897] + "..."
+        
+        return answer
+        
+    except Exception as e:
+        logger.error(f"Failed to answer question with Gemini: {e}")
+        return f"❌ I encountered an error while processing your question: {str(e)[:100]}"
