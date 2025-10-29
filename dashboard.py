@@ -22,6 +22,17 @@ bot = None  # Bot instance will be set from main.py
 @app.route('/')
 def index():
     """Main dashboard page."""
+    # Check if this is a simple keep-alive check
+    user_agent = request.headers.get('User-Agent', '').lower()
+    if 'uptimerobot' in user_agent or 'monitor' in user_agent or 'ping' in user_agent:
+        # Return simple status for monitoring services
+        return jsonify({
+            'status': 'online',
+            'bot': 'LupinBot',
+            'message': 'Bot is running! 🦊'
+        })
+    
+    # Return full dashboard for browser access
     return render_template('dashboard.html')
 
 @app.route('/health')
