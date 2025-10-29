@@ -36,7 +36,7 @@ intents.guilds = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 db = Database()
 
-# Setup dashboard integration if running in same process
+# Setup dashboard integration and keep-alive server for Replit
 def setup_dashboard_integration():
     """Setup dashboard integration with bot instance and optionally start server on Replit."""
     try:
@@ -50,17 +50,62 @@ def setup_dashboard_integration():
                 try:
                     # Use port 8080 for Replit's public webview
                     port = int(os.environ.get('PORT', '8080'))
+                    logger.info(f'🌐 Starting dashboard on port {port} for Replit webview')
                     dashboard.run_dashboard(host='0.0.0.0', port=port, debug=False)
                 except Exception as e:
                     logger.error(f'Dashboard error: {e}')
+                    # Fallback: Start minimal keep-alive server
+                    logger.info('Starting fallback keep-alive server...')
+                    start_fallback_keepalive(port)
             
             # Start the dashboard in a daemon thread
             dashboard_thread = Thread(target=run_dash, daemon=True)
             dashboard_thread.start()
             logger.info(f'📊 Dashboard started in background on http://0.0.0.0:{os.environ.get("PORT", "8080")}')
+            logger.info('💡 To keep bot alive 24/7, setup UptimeRobot to ping your Replit URL every 5 minutes')
+            logger.info(f'   Ping URL: https://{os.environ.get("REPL_SLUG", "your-repl")}.{os.environ.get("REPL_OWNER", "username")}.repl.co/health')
             
     except Exception as e:
-        logger.debug(f'Dashboard integration not available: {e}')
+        logger.warning(f'Dashboard not available: {e}')
+        # If dashboard fails on Replit, start minimal keep-alive
+        if IS_REPLIT:
+            logger.info('Starting fallback keep-alive server...')
+            port = int(os.environ.get('PORT', '8080'))
+            fallback_thread = Thread(target=lambda: start_fallback_keepalive(port), daemon=True)
+            fallback_thread.start()
+
+def start_fallback_keepalive(port):
+    """Minimal Flask server for keep-alive if dashboard fails."""
+    from flask import Flask, jsonify
+    
+    app = Flask(__name__)
+    
+    @app.route('/')
+    def home():
+        return jsonify({
+            'status': 'online',
+            'bot': 'LupinBot',
+            'message': 'Bot is running! 🦊',
+            'uptime': 'active'
+        })
+    
+    @app.route('/health')
+    def health():
+        return jsonify({
+            'status': 'ok',
+            'bot_connected': bot.is_ready() if bot else False,
+            'guilds': len(bot.guilds) if bot and bot.is_ready() else 0
+        })
+    
+    @app.route('/ping')
+    def ping():
+        return jsonify({'pong': True, 'timestamp': datetime.utcnow().isoformat()})
+    
+    try:
+        logger.info(f'🔥 Fallback keep-alive server running on port {port}')
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        logger.error(f'Fallback keep-alive error: {e}')
 
 def _iter_daily_code_channels(guild: discord.Guild):
     """Yield channels to process: configured daily-code channel if set, otherwise channels containing 'daily-code'."""
