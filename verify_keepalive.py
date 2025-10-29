@@ -129,10 +129,10 @@ def print_uptimerobot_instructions(repl_url):
     print("3. Click '+ Add New Monitor'")
     print("4. Configure the monitor:\n")
     
-    print(f"   Monitor Type: HTTP(s)")
-    print(f"   Friendly Name: LupinBot Keep-Alive")
+    print("   Monitor Type: HTTP(s)")
+    print("   Friendly Name: LupinBot Keep-Alive")
     print(f"   URL: {repl_url}/health")
-    print(f"   Monitoring Interval: 5 minutes")
+    print("   Monitoring Interval: 5 minutes")
     
     print("\n5. Click 'Create Monitor'")
     print("6. Monitor should show 'Up' status in green")
