@@ -202,6 +202,86 @@ async def on_message(message):
         return
     
     if bot.user.mentioned_in(message) and not message.mention_everyone:
+        # Extract the message content without the bot mention
+        content = message.content
+        for mention in message.mentions:
+            if mention.id == bot.user.id:
+                content = content.replace(f'<@{mention.id}>', '').replace(f'<@!{mention.id}>', '')
+        content = content.strip()
+        
+        # If there's additional content (a question/request), use AI to respond
+        if content:
+            try:
+                # Show typing indicator
+                async with message.channel.typing():
+                    import gemini
+                    import aiohttp
+                    
+                    # Process attachments
+                    attachments_data = []
+                    image_data = []
+                    
+                    for attachment in message.attachments:
+                        # Check if it's a code file
+                        code_extensions = [
+                            '.py', '.js', '.ts', '.java', '.cpp', '.c', '.cs', '.php',
+                            '.rb', '.go', '.rs', '.swift', '.kt', '.scala', '.r',
+                            '.html', '.css', '.scss', '.sass', '.less', '.xml',
+                            '.json', '.yaml', '.yml', '.toml', '.ini', '.cfg',
+                            '.sql', '.sh', '.bash', '.ps1', '.bat', '.cmd',
+                            '.md', '.txt', '.log', '.conf', '.config'
+                        ]
+                        
+                        if any(attachment.filename.lower().endswith(ext) for ext in code_extensions):
+                            # Download and read text file
+                            try:
+                                async with aiohttp.ClientSession() as session:
+                                    async with session.get(attachment.url) as resp:
+                                        if resp.status == 200:
+                                            file_content = await resp.text()
+                                            attachments_data.append({
+                                                'filename': attachment.filename,
+                                                'content': file_content,
+                                                'mime_type': attachment.content_type or 'text/plain'
+                                            })
+                            except Exception as e:
+                                logger.error(f"Failed to download attachment {attachment.filename}: {e}")
+                        
+                        # Check if it's an image
+                        elif attachment.content_type and attachment.content_type.startswith('image/'):
+                            try:
+                                async with aiohttp.ClientSession() as session:
+                                    async with session.get(attachment.url) as resp:
+                                        if resp.status == 200:
+                                            image_bytes = await resp.read()
+                                            image_data.append({
+                                                'data': image_bytes,
+                                                'mime_type': attachment.content_type
+                                            })
+                            except Exception as e:
+                                logger.error(f"Failed to download image {attachment.filename}: {e}")
+                    
+                    # Get AI response
+                    answer = await gemini.answer_question(content, attachments_data, image_data)
+                    
+                    # Send response as a reply
+                    embed = discord.Embed(
+                        title="🤖 Lupin AI Assistant",
+                        description=answer,
+                        color=discord.Color.blue()
+                    )
+                    embed.set_footer(text=f"Asked by {message.author.name}")
+                    
+                    await message.reply(embed=embed, mention_author=False)
+                    logger.info(f"Answered question from {message.author} in {message.guild.name}")
+                    return
+                    
+            except Exception as e:
+                logger.error(f"Error answering question: {e}")
+                await message.reply("❌ Sorry, I encountered an error while processing your question. Please try again!")
+                return
+        
+        # If no additional content, show introduction embed
         embed = discord.Embed(
             title="🦊 Hey there! I'm Lupin",
             description="Your **AI-powered coding streak companion**! 🚀\n\nI help you build **consistent coding habits** with smart streak tracking, motivational features, and fun challenges designed specifically for developers!",
@@ -243,15 +323,15 @@ async def on_message(message):
         
         # AI Features
         embed.add_field(
-            name="🤖 **AI-Powered Detection**",
-            value="✨ **Smart code detection** in messages\n📁 **File analysis** (20+ languages)\n🖼️ **Image recognition** for screenshots\n🔍 **Pattern matching** for day numbers",
+            name="🤖 **AI-Powered Features**",
+            value="✨ **Smart code detection** in messages\n📁 **File analysis** (20+ languages)\n🖼️ **Image recognition** for screenshots\n💬 **Ask me questions**: @Lupin explain this code",
             inline=False
         )
         
         # Quick Tips
         embed.add_field(
             name="💡 **Pro Tips**",
-            value="• **No #DAY needed**: Just share code!\n• **File uploads**: `.py`, `.js`, `.java`, etc.\n• **Screenshots**: I can read code in images\n• **Flexible**: Works with any coding activity",
+            value="• **No #DAY needed**: Just share code!\n• **File uploads**: `.py`, `.js`, `.java`, etc.\n• **Screenshots**: I can read code in images\n• **Ask me anything**: Tag me with a question!",
             inline=False
         )
         
