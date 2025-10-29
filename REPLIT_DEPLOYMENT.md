@@ -176,35 +176,30 @@ if IS_REPLIT:
     print('🦊 Running on Replit!')
 ```
 
-### Optional: Always On Keep-Alive
+### ✅ Keep-Alive is Already Built-In!
 
-For Replit's free tier, add a keep-alive ping:
+**Good news:** The bot now includes automatic keep-alive functionality!
 
-```python
-# Add to main.py
+The keep-alive server is automatically started when running on Replit:
+- Dashboard runs on port 8080 (Replit's webview port)
+- `/health` endpoint for monitoring
+- `/ping` endpoint for simple checks
+- Fallback keep-alive if dashboard fails
 
-from flask import Flask
-from threading import Thread
+**You don't need to add any code!** Just follow these steps:
 
-# Keep-alive server for Replit free tier
-def create_keep_alive():
-    server = Flask(__name__)
-    
-    @server.route('/')
-    def home():
-        return "LupinBot is running! 🦊"
-    
-    @server.route('/health')
-    def health():
-        return jsonify({"status": "ok"})
-    
-    server.run(host='0.0.0.0', port=8080)
+1. **Run the bot:** `python main.py`
+2. **Verify it's working:** `python verify_keepalive.py`
+3. **Setup UptimeRobot:** See `KEEPALIVE_SETUP.md` for instructions
 
-# Start keep-alive in background
-if IS_REPLIT:
-    keep_alive = Thread(target=create_keep_alive, daemon=True)
-    keep_alive.start()
+The bot will log:
 ```
+🦊 Running on Replit!
+📊 Dashboard started in background on http://0.0.0.0:8080
+💡 To keep bot alive 24/7, setup UptimeRobot to ping your Replit URL
+```
+
+**Complete Setup Guide:** See `KEEPALIVE_SETUP.md`
 
 ## 🎮 Step 6: Run the Bot
 
