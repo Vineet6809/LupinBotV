@@ -380,6 +380,86 @@ class Utilities(commands.Cog):
         self.db.set_daily_code_channel(interaction.guild_id, channel.id)
         await interaction.response.send_message(f"✅ Daily-code activity channel set to {channel.mention}")
 
+    @app_commands.command(name="checkreminder", description="Check current reminder configuration")
+    async def checkreminder(self, interaction: discord.Interaction):
+        """Check the current reminder configuration for the server."""
+        settings = self.db.get_server_settings(interaction.guild_id)
+        
+        if not settings:
+            embed = discord.Embed(
+                title="⚠️ No Reminder Configuration",
+                description="This server doesn't have any reminder settings configured yet.",
+                color=discord.Color.orange()
+            )
+            embed.add_field(
+                name="How to set up reminders",
+                value="1. `/setreminder time:\"HH:MM AM/PM\"` - Set the reminder time (IST)\n2. `/setreminderchannel channel:#your-channel` - Set the channel for reminders",
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        prefix, reminder_time_utc, challenge_channel_id, reminder_channel_id = settings
+        
+        embed = discord.Embed(
+            title="⏰ Reminder Configuration",
+            description="Current reminder settings for this server",
+            color=discord.Color.blue()
+        )
+        
+        # Check reminder time
+        if reminder_time_utc:
+            try:
+                # Convert UTC to IST for display
+                ist = pytz.timezone('Asia/Kolkata')
+                hour_utc, minute_utc = map(int, reminder_time_utc.split(':'))
+                now_utc = datetime.utcnow().replace(hour=hour_utc, minute=minute_utc, second=0, microsecond=0, tzinfo=pytz.utc)
+                now_ist = now_utc.astimezone(ist)
+                time_ist_str = now_ist.strftime('%I:%M %p')
+                embed.add_field(name="⏰ Reminder Time", value=f"✅ {time_ist_str} IST", inline=False)
+            except:
+                embed.add_field(name="⏰ Reminder Time", value=f"✅ {reminder_time_utc} UTC", inline=False)
+        else:
+            embed.add_field(name="⏰ Reminder Time", value="❌ Not set\nUse `/setreminder time:\"HH:MM AM/PM\"`", inline=False)
+        
+        # Check reminder channel
+        if reminder_channel_id:
+            channel = self.bot.get_channel(reminder_channel_id)
+            if channel:
+                embed.add_field(name="📢 Reminder Channel", value=f"✅ {channel.mention}", inline=False)
+            else:
+                embed.add_field(name="📢 Reminder Channel", value=f"⚠️ Channel ID {reminder_channel_id} (not found)", inline=False)
+        else:
+            embed.add_field(name="📢 Reminder Channel", value="❌ Not set\nUse `/setreminderchannel channel:#your-channel`", inline=False)
+        
+        # Show reminder status
+        if reminder_time_utc and reminder_channel_id:
+            embed.add_field(
+                name="✅ Status",
+                value="Reminders are **active** and will be sent to users with pending streaks.",
+                inline=False
+            )
+            
+            # Show who would be reminded today
+            today_str = datetime.utcnow().strftime("%Y-%m-%d")
+            users_to_remind = self.db.get_users_to_remind(interaction.guild_id, today_str)
+            if users_to_remind:
+                embed.add_field(
+                    name="📊 Pending Today",
+                    value=f"{len(users_to_remind)} user(s) with active streaks haven't logged today",
+                    inline=False
+                )
+        else:
+            embed.add_field(
+                name="❌ Status",
+                value="Reminders are **inactive**. Both time and channel must be configured.",
+                inline=False
+            )
+        
+        embed.set_footer(text="Use /setreminder and /setreminderchannel to configure reminders")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info(f'{interaction.user} checked reminder configuration')
+
     @app_commands.command(name="sync_commands", description="Sync bot commands with Discord (Admin only)")
     async def sync_commands(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
