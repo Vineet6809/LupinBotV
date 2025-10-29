@@ -26,7 +26,31 @@ def index():
 
 @app.route('/health')
 def health():
-    return jsonify({"status": "ok"})
+    """Health check endpoint for keep-alive monitoring."""
+    try:
+        # Check if bot is connected
+        bot_status = {
+            'bot_connected': bot.is_ready() if bot else False,
+            'guilds': len(bot.guilds) if bot and bot.is_ready() else 0,
+            'uptime': 'active'
+        }
+        return jsonify({
+            "status": "ok",
+            "timestamp": datetime.utcnow().isoformat(),
+            **bot_status
+        })
+    except Exception as e:
+        logger.error(f'Health check error: {e}')
+        return jsonify({"status": "ok", "timestamp": datetime.utcnow().isoformat()})
+
+@app.route('/ping')
+def ping():
+    """Simple ping endpoint for keep-alive."""
+    return jsonify({
+        'pong': True,
+        'timestamp': datetime.utcnow().isoformat(),
+        'status': 'alive'
+    })
 
 @app.route('/api/server_stats/<int:guild_id>')
 def server_stats(guild_id):
