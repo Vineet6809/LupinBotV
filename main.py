@@ -293,7 +293,7 @@ async def on_message(message):
         # If no additional content, show introduction embed
         embed = discord.Embed(
             title="🦊 Hey there! I'm Lupin",
-            description="Your **AI-powered coding streak companion**! 🚀\n\nI help you build **consistent coding habits** with smart streak tracking, motivational features, and fun challenges designed specifically for developers!",
+            description="Your **AI-powered coding streak companion** with Duolingo-style tracking! 🚀\n\nI help you build **consistent coding habits** with smart streak tracking, AI assistance, visual progress calendars, and motivational features designed specifically for developers!",
             color=discord.Color.blue()
         )
         
@@ -301,57 +301,78 @@ async def on_message(message):
         embed.add_field(
             name="🎯 **How to Start Your Streak**",
             value="""
-1. Share any code in #daily-code
-2. Upload code files or screenshots
-3. Use #DAY-1, #DAY-2, etc. (optional)
-4. I'll detect and track automatically!
+1. Share **any code** in #daily-code (no #DAY needed!)
+2. Upload code files, screenshots, or snippets
+3. I'll **auto-detect and track** your streak
+4. Use `#DAY-n` optionally for reference
 """,
             inline=False
         )
         
-        # Core Features
+        # AI Q&A Feature
         embed.add_field(
-            name="🔥 **Core Features**",
-            value="`/mystats` - Your progress & achievements\n`/streak_calendar` - Visual streak calendar\n`/leaderboard` - Server rankings\n`/streaks_history` - Your streak timeline",
-            inline=True
-        )
-        
-        # Protection & Fun
-        embed.add_field(
-            name="🛡️ **Streak Protection**",
-            value="`/use_freeze` - Protect your streak\n`/restore` - Restore lost streaks\n❄️ **Grace period**: 2-day buffer\n🏆 **Achievements**: Unlock badges!",
-            inline=True
-        )
-        
-        # Fun & Motivation
-        embed.add_field(
-            name="🎮 **Fun & Motivation**",
-            value="`/challenge` - Random coding challenges\n`/meme` - Programming memes\n`/quote` - Inspirational quotes\n`/joke` - Developer jokes",
-            inline=True
-        )
-        
-        # AI Features
-        embed.add_field(
-            name="🤖 **AI-Powered Features**",
-            value="✨ **Smart code detection** in messages\n📁 **File analysis** (20+ languages)\n🖼️ **Image recognition** for screenshots\n💬 **Ask me questions**: @Lupin explain this code",
+            name="🤖 **AI Q&A Assistant** (NEW!)",
+            value="💬 **Tag me with questions**: `@Lupin explain recursion`\n📁 **Analyze files**: Upload `.py`, `.js`, `.java` + ask\n🖼️ **Read screenshots**: Share error images for help\n✨ **Multi-file support**: Compare implementations\n🔍 **Debug help**: Get instant coding assistance",
             inline=False
         )
         
-        # Quick Tips
+        # Duolingo-Style Features
+        embed.add_field(
+            name="📅 **Duolingo-Style Features**",
+            value="`/streak_calendar` - Visual 30-day calendar (✅/⚫)\n`/use_freeze` - Protect streak when you miss\n❄️ **Auto-freeze**: Automatically uses freezes\n🎯 **Simplified**: Just code daily, no #DAY tags!",
+            inline=True
+        )
+        
+        # Core Tracking
+        embed.add_field(
+            name="🔥 **Streak Tracking**",
+            value="`/mystats` - Progress & achievements\n`/leaderboard` - Server rankings\n`/streaks_history` - Last 30 days\n`/serverstats` - Server-wide stats\n🏆 **5 Badge Levels**: Beginner → Legend",
+            inline=True
+        )
+        
+        # Protection & Rewards
+        embed.add_field(
+            name="🛡️ **Streak Protection**",
+            value="`/restore` - Restore lost streaks (admin)\n⏰ **Daily reminders**: Stay motivated\n📊 **Weekly summaries**: Top performers\n🧊 **2-day grace period**: Built-in buffer",
+            inline=True
+        )
+        
+        # Fun Commands
+        embed.add_field(
+            name="🎮 **Fun & Motivation**",
+            value="`/challenge` - Random coding challenges\n`/meme` - Programming memes\n`/quote` - Inspirational quotes\n`/joke` - Developer jokes\n🎯 **Stay motivated** with daily content!",
+            inline=True
+        )
+        
+        # Smart Detection
+        embed.add_field(
+            name="✨ **Smart Code Detection**",
+            value="📝 **Text**: Detects code blocks automatically\n📁 **Files**: Supports 20+ languages\n🖼️ **Images**: OCR for code screenshots\n🔍 **Flexible**: Works in any format!",
+            inline=True
+        )
+        
+        # Achievement System
+        embed.add_field(
+            name="🏆 **Achievement Badges**",
+            value="🔰 **Beginner** (1-6 days)\n🌟 **Rising Star** (7-29 days)\n⭐ **Champion** (30-99 days)\n💎 **Master** (100-364 days)\n🏆 **Legend** (365+ days)",
+            inline=True
+        )
+        
+        # Quick Pro Tips
         embed.add_field(
             name="💡 **Pro Tips**",
-            value="• **No #DAY needed**: Just share code!\n• **File uploads**: `.py`, `.js`, `.java`, etc.\n• **Screenshots**: I can read code in images\n• **Ask me anything**: Tag me with a question!",
+            value="• **Ask anything**: `@Lupin how do I use async in Python?`\n• **Upload files**: Get code reviews and explanations\n• **Screenshot errors**: I can read and debug them\n• **No tags needed**: Just share code daily!\n• **Use `/help`**: See all commands and features",
             inline=False
         )
         
         embed.set_footer(
-            text="Ready to start your coding journey? Share some code now! 💻 | Use /help for complete guide"
+            text="Ready to start? Share code or ask a question! 💻 | Web Dashboard available • Use /help for full guide"
         )
         embed.timestamp = discord.utils.utcnow()
         
-        # Add a fun thumbnail or author icon
+        # Add author with branding
         embed.set_author(
-            name="Lupin Bot",
+            name="Lupin Bot - Your AI Coding Companion",
             icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
         )
         
