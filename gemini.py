@@ -27,7 +27,6 @@ def get_client():
             return None
     return _client
 
-
 class CodeDetectionResult(BaseModel):
     contains_code: bool
     confidence: float
@@ -77,3 +76,49 @@ def detect_code_in_image(image_bytes: bytes, mime_type: str = "image/png") -> bo
     except Exception as e:
         logger.error(f"Failed to analyze image with Gemini (quota/error), accepting image as fallback: {e}")
         return True
+
+
+def generate_challenge_from_history(history_samples: list[str], guild_name: str, channel_name: str) -> str:
+    """Generate a weekly coding challenge based on last 7 days' history using Gemini.
+    Falls back to a generic challenge when API unavailable.
+    """
+    try:
+        client = get_client()
+        if client is None:
+            # Fallback simple challenge
+            return (
+                "Build a small project inspired by your recent work: implement a CLI tool that parses input, "
+                "applies a transformation (e.g., sorting/filtering), and outputs results with tests."
+            )
+        
+        context_snippets = "\n\n".join(history_samples[:30]) or "No specific code available."
+        system_instruction = (
+            "You are a senior coding mentor crafting a single, clear weekly coding challenge for a Discord coding community. "
+            "Use the provided recent history snippets (messages or code fragments) as inspiration to make the challenge relevant. "
+            "Constraints: The challenge should be unique to this community, self-contained, doable within a week, and flexible across languages. "
+            "Output only the challenge text (2-5 sentences) without additional commentary, markdown headings, or code blocks."
+        )
+        user_prompt = (
+            f"Guild: {guild_name}\nChannel: {channel_name}\n\n"
+            f"Recent history (last 7 days, snippets):\n{context_snippets}\n\n"
+            "Now produce one compelling weekly challenge based on recurring themes or skills from the context."
+        )
+
+        resp = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=[user_prompt],
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.8,
+            ),
+        )
+        text = (resp.text or "").strip()
+        if not text:
+            return "Design and implement a small application covering I/O, data structures, and error handling, with unit tests."
+        # Trim overly long outputs
+        return text[:1000]
+    except Exception as e:
+        logger.error(f"Gemini challenge generation failed: {e}")
+        return (
+            "Create a small app inspired by your recent work: ingest data, perform meaningful transformations, and expose a simple interface."
+        )
