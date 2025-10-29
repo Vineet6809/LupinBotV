@@ -7,11 +7,27 @@ A multi-purpose Discord bot for coding communities that tracks daily coding stre
 ### Core Features
 - **📅 Daily Streak Tracking** - Track your coding progress with `#DAY-n` posts
 - **🤖 AI Code Detection** - Automatically detects code in images using Google Gemini
+- **💬 AI Q&A Assistant** - Ask Lupin questions by tagging it with your query
 - **🏆 Achievement System** - Earn badges as you reach milestones
 - **📊 Leaderboards** - Compete with others on your server
 - **🧊 Grace Period** - 2-day buffer before streak resets
 - **⏰ Daily Reminders** - Automated notifications to keep you motivated
 - **📈 Weekly Summaries** - Top performers get featured
+
+### AI Q&A Feature
+Tag Lupin with your question to get AI-powered help:
+- **Ask anything**: `@Lupin explain this code`
+- **With code files**: Upload `.py`, `.js`, `.java` files and ask about them
+- **With images**: Share screenshots and ask Lupin to analyze them
+- **Debug help**: `@Lupin why is this giving an error?`
+- **Explanations**: `@Lupin what does this function do?`
+
+Examples:
+```
+@Lupin explain what recursion is
+@Lupin [attach code file] can you review this?
+@Lupin [attach screenshot] what's wrong with this code?
+```
 
 ### New Commands
 - `/serverstats` - View server-wide coding statistics
