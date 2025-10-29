@@ -293,7 +293,7 @@ async def on_message(message):
         # If no additional content, show introduction embed
         embed = discord.Embed(
             title="🦊 Hey there! I'm Lupin",
-            description="Your **AI-powered coding streak companion** with Duolingo-style tracking! 🚀\n\nI help you build **consistent coding habits** with smart streak tracking, AI assistance, visual progress calendars, and motivational features designed specifically for developers!",
+            description="Your **AI-powered coding streak companion**! 🚀\n\nI help you build **consistent coding habits** with smart streak tracking, AI assistance, visual progress calendars, and motivational features designed specifically for developers!",
             color=discord.Color.blue()
         )
         
@@ -316,9 +316,9 @@ async def on_message(message):
             inline=False
         )
         
-        # Duolingo-Style Features
+        # Visual Progress Features
         embed.add_field(
-            name="📅 **Duolingo-Style Features**",
+            name="📅 **Visual Progress Tracking**",
             value="`/streak_calendar` - Visual 30-day calendar (✅/⚫)\n`/use_freeze` - Protect streak when you miss\n❄️ **Auto-freeze**: Automatically uses freezes\n🎯 **Simplified**: Just code daily, no #DAY tags!",
             inline=True
         )
