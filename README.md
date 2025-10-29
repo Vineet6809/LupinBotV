@@ -16,6 +16,7 @@ A multi-purpose Discord bot for coding communities that tracks daily coding stre
 ### New Commands
 - `/serverstats` - View server-wide coding statistics
 - `/streaks_history` - View your personal streak history (last 30 days)
+- `/checkreminder` - Check if daily reminders are properly configured (troubleshooting)
 
 ### Fun Commands
 - `/meme` - Get programming memes
