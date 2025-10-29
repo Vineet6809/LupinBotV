@@ -188,13 +188,15 @@ def set_bot_instance(bot_instance):
     bot = bot_instance
     logger.info('Bot instance set for dashboard')
 
-def run_dashboard(host='localhost', port=5000, debug=False):
+def run_dashboard(host='localhost', port=None, debug=False):
     """Run the dashboard server."""
+    if port is None:
+        port = int(os.environ.get('DASHBOARD_PORT', os.environ.get('PORT', '5000')))
     logger.info(f'Starting LupinBot Dashboard on http://{host}:{port}')
     logger.info('Make sure your Discord bot is running to access the data!')
     app.run(host=host, port=port, debug=debug)
 
 if __name__ == '__main__':
     import sys
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
-    run_dashboard(port=port, debug=True)
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get('DASHBOARD_PORT', os.environ.get('PORT', '5000')))
+    run_dashboard(host='0.0.0.0', port=port, debug=True)
