@@ -10,26 +10,11 @@ from threading import Thread
 import asyncio
 import re
 from datetime import datetime, timezone, timedelta
-from flask import Flask, jsonify
 
 # Replit detection
 IS_REPLIT = os.path.exists('/home/runner')
 if IS_REPLIT:
     print('🦊 Running on Replit!')
-
-# Keep-alive server for Replit free tier
-def create_keep_alive():
-    server = Flask(__name__)
-    
-    @server.route('/')
-    def home():
-        return "LupinBot is running! 🦊"
-    
-    @server.route('/health')
-    def health():
-        return jsonify({"status": "ok"})
-    
-    server.run(host='0.0.0.0', port=8080)
 
 load_dotenv()
 
@@ -59,17 +44,21 @@ def setup_dashboard_integration():
         dashboard.set_bot_instance(bot)
         logger.info('Dashboard integration enabled')
 
-        # On Replit, start dashboard server in background thread
+        # On Replit, start dashboard server in background thread on the primary port
         if IS_REPLIT:
             def run_dash():
                 try:
-                    port = int(os.environ.get('PORT', '5000'))
+                    # Use port 8080 for Replit's public webview
+                    port = int(os.environ.get('PORT', '8080'))
                     dashboard.run_dashboard(host='0.0.0.0', port=port, debug=False)
                 except Exception as e:
                     logger.error(f'Dashboard error: {e}')
-            t = threading.Thread(target=run_dash, daemon=True)
-            t.start()
-            logger.info('📊 Dashboard started in background on http://0.0.0.0:%s', os.environ.get('PORT', '5000'))
+            
+            # Start the dashboard in a daemon thread
+            dashboard_thread = Thread(target=run_dash, daemon=True)
+            dashboard_thread.start()
+            logger.info(f'📊 Dashboard started in background on http://0.0.0.0:{os.environ.get("PORT", "8080")}')
+            
     except Exception as e:
         logger.debug(f'Dashboard integration not available: {e}')
 
@@ -403,8 +392,7 @@ async def main():
         await bot.start(token)
 
 if __name__ == '__main__':
-    if IS_REPLIT:
-        keep_alive = Thread(target=create_keep_alive, daemon=True)
-        keep_alive.start()
-        print('🚀 Starting LupinBot on Replit...')
+    # The setup_dashboard_integration function is called in on_ready,
+    # which is the correct place to start it after the bot is initialized.
+    # No keep-alive thread is needed here as the dashboard serves that purpose.
     asyncio.run(main())
