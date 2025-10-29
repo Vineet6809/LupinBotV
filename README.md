@@ -118,6 +118,15 @@ See all commands with: `/help`
 - Check that dashboard.py is running
 - Verify database exists (`database.db`)
 
+### Reminders not working
+- **Most common issue**: Reminder channel not set
+- Run `/checkreminder` to see current configuration
+- Make sure both are configured:
+  1. `/setreminder time:"HH:MM AM/PM"` (e.g., "09:30 PM" in IST)
+  2. `/setreminderchannel channel:#your-channel`
+- Verify bot has permissions to send messages in the reminder channel
+- See `REMINDER_FIX_SUMMARY.md` for detailed troubleshooting
+
 ## 📊 Technologies Used
 
 - **Discord.py** - Discord API wrapper
