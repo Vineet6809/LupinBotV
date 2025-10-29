@@ -104,6 +104,21 @@ Open two terminals:
 - Terminal 1: `python main.py`
 - Terminal 2: `python dashboard.py`
 
+### Running on Replit (24/7 Keep-Alive)
+The bot includes automatic keep-alive functionality for Replit:
+```bash
+python main.py
+```
+- Dashboard automatically starts in background on port 8080
+- Web server provides `/health` endpoint for monitoring
+- Setup UptimeRobot to ping your Repl URL every 5 minutes
+- See `KEEPALIVE_SETUP.md` for complete instructions
+
+**Verify Keep-Alive Setup:**
+```bash
+python verify_keepalive.py
+```
+
 ## 🎯 Usage
 
 ### Tracking Streaks
