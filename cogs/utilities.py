@@ -339,6 +339,18 @@ class Utilities(commands.Cog):
                 title="⏰ Reminder Time Updated",
                 description=f"Daily streak reminder set to **{time} IST**.",
                 color=discord.Color.green())
+            
+            # Check if reminder channel is also configured
+            settings = self.db.get_server_settings(interaction.guild_id)
+            if settings:
+                _, _, _, reminder_channel_id = settings
+                if not reminder_channel_id:
+                    embed.add_field(
+                        name="⚠️ Additional Setup Required",
+                        value="Don't forget to set the reminder channel:\n`/setreminderchannel channel:#your-channel`",
+                        inline=False
+                    )
+                    embed.color = discord.Color.orange()
 
             await interaction.response.send_message(embed=embed)
             logger.info(f'{interaction.user} set reminder time to {time} IST ({time_24h_utc} UTC)')
