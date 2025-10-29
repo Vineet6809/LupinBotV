@@ -6,9 +6,30 @@ from database import Database
 import logging
 import sys
 import threading
+from threading import Thread
 import asyncio
 import re
 from datetime import datetime, timezone, timedelta
+from flask import Flask, jsonify
+
+# Replit detection
+IS_REPLIT = os.path.exists('/home/runner')
+if IS_REPLIT:
+    print('🦊 Running on Replit!')
+
+# Keep-alive server for Replit free tier
+def create_keep_alive():
+    server = Flask(__name__)
+    
+    @server.route('/')
+    def home():
+        return "LupinBot is running! 🦊"
+    
+    @server.route('/health')
+    def health():
+        return jsonify({"status": "ok"})
+    
+    server.run(host='0.0.0.0', port=8080)
 
 load_dotenv()
 
@@ -39,8 +60,7 @@ def setup_dashboard_integration():
         logger.info('Dashboard integration enabled')
 
         # On Replit, start dashboard server in background thread
-        is_replit = bool(os.environ.get('REPL_ID') or os.environ.get('REPLIT'))
-        if is_replit:
+        if IS_REPLIT:
             def run_dash():
                 try:
                     port = int(os.environ.get('PORT', '5000'))
@@ -376,7 +396,6 @@ async def load_cogs():
 async def main():
     async with bot:
         await load_cogs()
-        setup_dashboard_integration()  # Setup dashboard early
         token = os.getenv('DISCORD_TOKEN')
         if not token:
             logger.error('DISCORD_TOKEN not found in environment variables')
@@ -384,4 +403,8 @@ async def main():
         await bot.start(token)
 
 if __name__ == '__main__':
+    if IS_REPLIT:
+        keep_alive = Thread(target=create_keep_alive, daemon=True)
+        keep_alive.start()
+        print('🚀 Starting LupinBot on Replit...')
     asyncio.run(main())
