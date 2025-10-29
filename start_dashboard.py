@@ -31,8 +31,9 @@ def start_dashboard():
     # Start the dashboard
     try:
         from dashboard import run_dashboard
+        port = int(os.environ.get('DASHBOARD_PORT', os.environ.get('PORT', '5000')))
         print("✅ Starting dashboard server...")
-        run_dashboard(host='0.0.0.0', port=5000, debug=True)
+        run_dashboard(host='0.0.0.0', port=port, debug=True)
     except KeyboardInterrupt:
         print("\n👋 Dashboard stopped.")
     except Exception as e:
