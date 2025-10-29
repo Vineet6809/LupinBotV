@@ -50,6 +50,8 @@ class Utilities(commands.Cog):
             "setreminder": "Server Configuration",
             "setreminderchannel": "Server Configuration",
             "setchallengechannel": "Server Configuration",
+            "setweeklychallenge": "Challenges",
+            "setdailycodechannel": "Server Configuration",
             "sync_commands": "Server Configuration",
             "challenge": "Challenges"
         }
@@ -346,8 +348,8 @@ class Utilities(commands.Cog):
 
     @app_commands.command(
         name="setchallengechannel",
-        description="Set the channel for daily challenges (Admin only)")
-    @app_commands.describe(channel="The channel to post daily challenges")
+        description="Set the channel for weekly challenges (Admin only)")
+    @app_commands.describe(channel="The channel to post weekly challenges")
     async def setchallengechannel(self, interaction: discord.Interaction,
                                   channel: discord.TextChannel):
         if not interaction.user.guild_permissions.administrator:
@@ -356,12 +358,13 @@ class Utilities(commands.Cog):
                 ephemeral=True)
             return
 
+        # Reuse server_settings for backward compatibility
         self.db.set_server_setting(interaction.guild_id,
                                    'challenge_channel_id', channel.id)
 
         embed = discord.Embed(
             title="✅ Challenge Channel Set",
-            description=f"Daily challenges will be posted in {channel.mention}",
+            description=f"Weekly challenges will be posted in {channel.mention}",
             color=discord.Color.green())
 
         await interaction.response.send_message(embed=embed)
@@ -391,7 +394,17 @@ class Utilities(commands.Cog):
         await interaction.response.send_message(embed=embed)
         logger.info(
             f'{interaction.user} set reminder channel to {channel.name}')
-    
+
+    @app_commands.command(name="setdailycodechannel", description="Set the channel used for daily-code activity tracking (Admin only)")
+    async def setdailycodechannel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ You need administrator permissions to use this command.",
+                ephemeral=True)
+            return
+        self.db.set_daily_code_channel(interaction.guild_id, channel.id)
+        await interaction.response.send_message(f"✅ Daily-code activity channel set to {channel.mention}")
+
     @app_commands.command(name="sync_commands", description="Sync bot commands with Discord (Admin only)")
     async def sync_commands(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:

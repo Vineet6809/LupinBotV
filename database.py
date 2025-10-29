@@ -96,6 +96,14 @@ class Database:
             )
         """)
         
+        # Daily-code channel settings per guild
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS daily_code_settings (
+                guild_id INTEGER PRIMARY KEY,
+                channel_id INTEGER
+            )
+        """)
+        
         conn.commit()
         conn.close()
     
@@ -495,3 +503,26 @@ class Database:
         )
         conn.commit()
         conn.close()
+
+    # Daily code channel settings
+    def set_daily_code_channel(self, guild_id: int, channel_id: int):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO daily_code_settings (guild_id, channel_id)
+            VALUES (?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id
+            """,
+            (guild_id, channel_id)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_daily_code_channel(self, guild_id: int) -> Optional[int]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT channel_id FROM daily_code_settings WHERE guild_id = ?", (guild_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return int(row[0]) if row and row[0] is not None else None

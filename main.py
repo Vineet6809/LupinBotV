@@ -53,6 +53,18 @@ def setup_dashboard_integration():
     except Exception as e:
         logger.debug(f'Dashboard integration not available: {e}')
 
+def _iter_daily_code_channels(guild: discord.Guild):
+    """Yield channels to process: configured daily-code channel if set, otherwise channels containing 'daily-code'."""
+    configured_id = db.get_daily_code_channel(guild.id)
+    if configured_id:
+        ch = guild.get_channel(configured_id)
+        if ch and isinstance(ch, discord.TextChannel):
+            yield ch
+            return
+    for ch in guild.text_channels:
+        if 'daily-code' in ch.name.lower():
+            yield ch
+
 async def backfill_guild_history(guild: discord.Guild):
     """On startup: populate users from daily-code history and process missed messages since last seen/processed."""
     # Determine window
@@ -73,9 +85,7 @@ async def backfill_guild_history(guild: discord.Guild):
 
     processed_any = False
 
-    for channel in guild.text_channels:
-        if 'daily-code' not in channel.name.lower():
-            continue
+    for channel in _iter_daily_code_channels(guild):
         try:
             last_processed_id = db.get_last_processed(guild.id, channel.id)
             messages = []

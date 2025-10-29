@@ -119,6 +119,15 @@ class Streaks(commands.Cog):
             logger.error(f'Error calculating days since last log: {e}')
             return 999
 
+    def _is_daily_code_channel(self, channel: discord.abc.GuildChannel) -> bool:
+        try:
+            configured_id = self.db.get_daily_code_channel(channel.guild.id)
+            if configured_id and channel.id == configured_id:
+                return True
+        except Exception:
+            pass
+        return 'daily-code' in channel.name.lower()
+
     async def process_streak_message(self, message, day_number):
         user_id = message.author.id
         guild_id = message.guild.id
@@ -262,8 +271,8 @@ class Streaks(commands.Cog):
         elif has_code and day_number is not None:
             await self.process_streak_message(message, day_number)
         
-        # Daily code channel logic
-        elif "daily-code" in message.channel.name and has_code:
+        # Daily code channel logic (process code without explicit day only in daily-code channel)
+        elif self._is_daily_code_channel(message.channel) and has_code:
              await self.process_streak_message(message, None)
 
     @tasks.loop(minutes=1)

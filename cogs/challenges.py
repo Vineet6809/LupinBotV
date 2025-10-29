@@ -103,13 +103,20 @@ class Challenges(commands.Cog):
 
     async def _collect_last7_history_snippets(self, guild: discord.Guild) -> list[str]:
         """Collect minimal snippets from daily-code channel over last 7 days to seed Gemini challenge."""
-        ist = pytz.timezone('Asia/Kolkata')
         cutoff_utc = (self._get_ist_now() - timedelta(days=7)).astimezone(pytz.utc)
         snippets: list[str] = []
         
-        for channel in guild.text_channels:
-            if 'daily-code' not in channel.name.lower():
-                continue
+        # Prefer configured daily-code channel
+        daily_id = self.db.get_daily_code_channel(guild.id)
+        channels = []
+        if daily_id:
+            ch = guild.get_channel(daily_id)
+            if ch and isinstance(ch, discord.TextChannel):
+                channels = [ch]
+        if not channels:
+            channels = [ch for ch in guild.text_channels if 'daily-code' in ch.name.lower()]
+        
+        for channel in channels:
             try:
                 async for msg in channel.history(limit=1000, after=cutoff_utc, oldest_first=True):
                     text = (msg.content or '').strip()
