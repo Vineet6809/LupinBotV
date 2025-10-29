@@ -1,11 +1,21 @@
 """Web Dashboard for LupinBot"""
 from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
 from database import Database
 import logging
+import os
 from datetime import datetime
 
 logger = logging.getLogger('LupinBot.dashboard')
 app = Flask(__name__)
+
+# Configure CORS - restrict in production
+allowed_origins = os.environ.get('ALLOWED_ORIGINS', '*')
+if allowed_origins == '*':
+    CORS(app)
+else:
+    CORS(app, origins=allowed_origins.split(','))
+
 db = Database()
 bot = None  # Bot instance will be set from main.py
 
