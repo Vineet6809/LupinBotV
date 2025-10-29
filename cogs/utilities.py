@@ -50,6 +50,7 @@ class Utilities(commands.Cog):
             "setreminder": "Server Configuration",
             "setreminderchannel": "Server Configuration",
             "setweeklychallenge": "Challenges",
+            "setchallengechannel": "Challenges",
             "setdailycodechannel": "Server Configuration",
             "sync_commands": "Server Configuration",
             "challenge": "Challenges"
