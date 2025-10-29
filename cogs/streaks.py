@@ -283,6 +283,11 @@ class Streaks(commands.Cog):
         current_time_ist = now_ist.strftime("%H:%M")
 
         guilds = self.db.get_all_reminder_guilds()
+        
+        # Log if no guilds have reminders configured (only log once per hour to avoid spam)
+        if not guilds and now_ist.minute == 0:
+            logger.warning("No guilds have both reminder_time and reminder_channel_id configured")
+        
         for guild_id, reminder_time_utc, reminder_channel_id in guilds:
             # reminder_time in DB is stored as UTC HH:MM; convert to IST HH:MM for comparison
             try:
@@ -292,7 +297,8 @@ class Streaks(commands.Cog):
                 target_utc = now_utc.replace(hour=hour_utc, minute=minute_utc)
                 target_ist = target_utc.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Asia/Kolkata'))
                 target_ist_str = target_ist.strftime('%H:%M')
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error converting reminder time for guild {guild_id}: {e}")
                 target_ist_str = reminder_time_utc or '18:00'
 
             if current_time_ist == target_ist_str:
@@ -300,13 +306,21 @@ class Streaks(commands.Cog):
                 if users_to_remind:
                     channel = self.bot.get_channel(reminder_channel_id)
                     if channel:
-                        mentions = [f'<@{user_id}>' for user_id in users_to_remind]
-                        embed = discord.Embed(
-                            title="🔥 Daily Coding Reminder!",
-                            description=f"Time to continue your streak! Don't forget to post your progress today. (Time shown in IST)",
-                            color=discord.Color.orange()
-                        )
-                        await channel.send(" ".join(mentions), embed=embed)
+                        try:
+                            mentions = [f'<@{user_id}>' for user_id in users_to_remind]
+                            embed = discord.Embed(
+                                title="🔥 Daily Coding Reminder!",
+                                description=f"Time to continue your streak! Don't forget to post your progress today. (Time shown in IST)",
+                                color=discord.Color.orange()
+                            )
+                            await channel.send(" ".join(mentions), embed=embed)
+                            logger.info(f"Sent reminder to {len(users_to_remind)} users in guild {guild_id} at {current_time_ist} IST")
+                        except Exception as e:
+                            logger.error(f"Failed to send reminder in guild {guild_id}: {e}")
+                    else:
+                        logger.warning(f"Reminder channel {reminder_channel_id} not found for guild {guild_id}")
+                else:
+                    logger.debug(f"No users to remind in guild {guild_id} at {current_time_ist} IST")
 
     @reminder_task.before_loop
     async def before_reminder_task(self):
