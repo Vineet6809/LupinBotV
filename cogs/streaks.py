@@ -9,6 +9,7 @@ import aiohttp
 import asyncio
 import gemini
 from collections import deque
+import pytz
 
 logger = logging.getLogger('LupinBot.streaks')
 
@@ -267,22 +268,33 @@ class Streaks(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def reminder_task(self):
-        """Checks every minute if it's time to send reminders."""
-        now_utc = datetime.utcnow()
-        today_str = now_utc.strftime("%Y-%m-%d")
-        current_time_str = now_utc.strftime("%H:%M")
+        """Checks every minute if it's time to send reminders based on IST."""
+        now_ist = datetime.now(pytz.timezone('Asia/Kolkata'))
+        today_str_utc = datetime.utcnow().strftime("%Y-%m-%d")
+        current_time_ist = now_ist.strftime("%H:%M")
 
         guilds = self.db.get_all_reminder_guilds()
-        for guild_id, reminder_time, reminder_channel_id in guilds:
-            if current_time_str == reminder_time:
-                users_to_remind = self.db.get_users_to_remind(guild_id, today_str)
+        for guild_id, reminder_time_utc, reminder_channel_id in guilds:
+            # reminder_time in DB is stored as UTC HH:MM; convert to IST HH:MM for comparison
+            try:
+                # Build a datetime today with UTC time
+                hour_utc, minute_utc = map(int, (reminder_time_utc or '18:00').split(':'))
+                now_utc = datetime.utcnow().replace(second=0, microsecond=0)
+                target_utc = now_utc.replace(hour=hour_utc, minute=minute_utc)
+                target_ist = target_utc.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Asia/Kolkata'))
+                target_ist_str = target_ist.strftime('%H:%M')
+            except Exception:
+                target_ist_str = reminder_time_utc or '18:00'
+
+            if current_time_ist == target_ist_str:
+                users_to_remind = self.db.get_users_to_remind(guild_id, today_str_utc)
                 if users_to_remind:
                     channel = self.bot.get_channel(reminder_channel_id)
                     if channel:
                         mentions = [f'<@{user_id}>' for user_id in users_to_remind]
                         embed = discord.Embed(
                             title="🔥 Daily Coding Reminder!",
-                            description=f"Time to continue your streak! Don't forget to post your progress today.",
+                            description=f"Time to continue your streak! Don't forget to post your progress today. (Time shown in IST)",
                             color=discord.Color.orange()
                         )
                         await channel.send(" ".join(mentions), embed=embed)
